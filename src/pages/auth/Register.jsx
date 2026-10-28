@@ -75,12 +75,14 @@ export function Register() {
           <Input
             label="First name"
             placeholder="Alex"
+            required
             value={formData.firstName}
             onChange={(e) => handleChange('firstName', e.target.value)}
           />
           <Input
             label="Last name"
             placeholder="Martin"
+            required
             value={formData.lastName}
             onChange={(e) => handleChange('lastName', e.target.value)}
           />
@@ -89,6 +91,7 @@ export function Register() {
           label="Email address"
           type="email"
           placeholder="alex.martin@example.com"
+          required
           value={formData.email}
           onChange={(e) => handleChange('email', e.target.value)}
         />
@@ -103,12 +106,14 @@ export function Register() {
           label="Password"
           type="password"
           placeholder="Min 6 characters"
+          required
           value={formData.password}
           onChange={(e) => handleChange('password', e.target.value)}
         />
         <Input
           label="Confirm password"
           type="password"
+          required
           value={formData.confirmPassword}
           onChange={(e) => handleChange('confirmPassword', e.target.value)}
         />

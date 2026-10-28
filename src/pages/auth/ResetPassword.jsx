@@ -8,7 +8,6 @@ export function ResetPassword() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -20,10 +19,7 @@ export function ResetPassword() {
       setError('Password must be at least 6 characters')
       return
     }
-    setLoading(true)
-    setTimeout(() => {
-      navigate('/login')
-    }, 800)
+    setError('Password changes are unavailable in this demo; no password was changed.')
   }
 
   return (
@@ -32,7 +28,7 @@ export function ResetPassword() {
         Set new password
       </h1>
       <p className="mt-2 text-slate-500">
-        Enter your new password to regain access.
+        Password reset requires an email service and backend, which are not configured.
       </p>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-5">
@@ -50,8 +46,11 @@ export function ResetPassword() {
           onChange={(e) => setConfirmPassword(e.target.value)}
         />
         {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
-        <Button type="submit" disabled={loading || !password} className="w-full">
-          {loading ? 'Updating...' : 'Update password'}
+        <Button type="submit" disabled={!password || !confirmPassword} className="w-full">
+          Check reset availability
+        </Button>
+        <Button type="button" variant="secondary" onClick={() => navigate('/login')} className="w-full">
+          Back to sign in
         </Button>
       </form>
     </div>

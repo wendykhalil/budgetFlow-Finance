@@ -8,15 +8,10 @@ export function ForgotPassword() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
-  const [loading, setLoading] = useState(false)
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    setLoading(true)
-    setTimeout(() => {
-      setSubmitted(true)
-      setLoading(false)
-    }, 800)
+    setSubmitted(true)
   }
 
   return (
@@ -25,15 +20,15 @@ export function ForgotPassword() {
         Forgot password?
       </h1>
       <p className="mt-2 text-slate-500">
-        Enter your email and we'll send you a reset link.
+        Password reset email delivery is unavailable in this demo.
       </p>
 
       {submitted ? (
         <div role="status" className="mt-8 rounded-xl bg-emerald-50 p-6 text-center">
-          <div className="mb-4 text-3xl">✓</div>
-          <h3 className="font-bold text-emerald-800">Reset email sent!</h3>
-          <p className="mt-2 text-sm text-emerald-700">
-            Check your inbox for a password reset link.
+          <div className="mb-4 text-3xl">!</div>
+          <h3 className="font-bold text-amber-800">No email was sent</h3>
+          <p className="mt-2 text-sm text-amber-700">
+            Password reset requires a backend email service, which is not configured.
           </p>
           <button
             onClick={() => navigate('/login')}
@@ -51,8 +46,8 @@ export function ForgotPassword() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          <Button type="submit" disabled={loading || !email} className="w-full">
-            {loading ? 'Sending...' : 'Send reset link'}
+          <Button type="submit" disabled={!email} className="w-full">
+            Check reset availability
           </Button>
           <button
             type="button"
