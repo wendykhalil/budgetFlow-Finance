@@ -67,6 +67,7 @@ export function ClientTransactions() {
         </div>
         <div className="flex flex-wrap gap-3">
           <select
+            aria-label="Filter by transaction type"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
             className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none"
@@ -76,6 +77,7 @@ export function ClientTransactions() {
             <option value="expense">Expenses</option>
           </select>
           <select
+            aria-label="Filter by date"
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
             className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none"
@@ -136,12 +138,16 @@ export function ClientTransactions() {
                       <td className="px-5 py-4">
                         <div className="flex items-center justify-end gap-2">
                           <button
+                            type="button"
+                            aria-label={`View transaction ${t.description}`}
                             onClick={() => navigate(`/client/transactions/${t.id}`)}
                             className="text-slate-600 hover:text-slate-900"
                           >
                             <Icon name="eye" className="size-4" />
                           </button>
                           <button
+                            type="button"
+                            aria-label={`Delete transaction ${t.description}`}
                             onClick={() => handleDelete(t.id)}
                             className="text-rose-600 hover:text-rose-700"
                           >

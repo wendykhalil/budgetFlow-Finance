@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useState } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 import PageTitle from '@/components/layout/PageTitle'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -14,6 +15,7 @@ import { formatCurrency } from '@/utils/formatters'
 
 export function ClientDashboard() {
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   const totalIncome = transactions.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0)
   const totalExpenses = transactions.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
@@ -44,7 +46,7 @@ export function ClientDashboard() {
   return (
     <>
       <PageTitle
-        title="Good morning, Alex"
+        title={`Good morning, ${user?.firstName?.trim() || 'there'}`}
         sub="Here's your financial overview for October 2026."
         action={
           <Button onClick={() => navigate('/client/transactions/new')}>
@@ -115,8 +117,15 @@ export function ClientDashboard() {
               View all <Icon name="arrow" className="size-4" />
             </Button>
           </div>
-          <div className="overflow-x-auto">
+          <div className="min-w-0 overflow-x-auto">
             <table className="w-full text-left text-sm">
+              <thead className="sr-only">
+                <tr>
+                  <th scope="col">Transaction</th>
+                  <th scope="col">Category</th>
+                  <th scope="col">Amount</th>
+                </tr>
+              </thead>
               <tbody className="divide-y divide-slate-100">
                 {recentTransactions.map((t) => (
                   <tr key={t.id} className="hover:bg-slate-50/60">

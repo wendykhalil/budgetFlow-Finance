@@ -7,12 +7,13 @@ import Card from '@/components/ui/Card'
 import Avatar from '@/components/ui/Avatar'
 import Input from '@/components/ui/Input'
 import Icon from '@/components/ui/Icon'
+import { getUserDisplayName, getUserInitials } from '@/utils/userIdentity'
 
 export function ClientProfile() {
   const { user, login } = useAuth()
-  const [firstName, setFirstName] = useState(user?.firstName || 'Alex')
-  const [lastName, setLastName] = useState(user?.lastName || 'Martin')
-  const [email, setEmail] = useState(user?.email || 'alex.martin@example.com')
+  const [firstName, setFirstName] = useState(user?.firstName || '')
+  const [lastName, setLastName] = useState(user?.lastName || '')
+  const [email, setEmail] = useState(user?.email || '')
   const [phone, setPhone] = useState('+33 6 12 34 56 78')
   const [currency, setCurrency] = useState('EUR')
   const [country, setCountry] = useState('France')
@@ -32,8 +33,8 @@ export function ClientProfile() {
 
       <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
         <Card className="text-center">
-          <Avatar initials={user?.avatar || 'AM'} size="xl" color={user?.avatarColor || 'amber'} />
-          <div className="mt-4 text-xl font-bold">{firstName} {lastName}</div>
+          <Avatar initials={getUserInitials(user)} size="xl" color={user?.avatarColor || 'emerald'} />
+          <div className="mt-4 text-xl font-bold">{getUserDisplayName(user)}</div>
           <div className="text-sm text-slate-500">{email}</div>
           <Badge tone="green" className="mt-2">
             Active client

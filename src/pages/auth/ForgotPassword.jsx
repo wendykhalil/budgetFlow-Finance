@@ -29,7 +29,7 @@ export function ForgotPassword() {
       </p>
 
       {submitted ? (
-        <div className="mt-8 rounded-xl bg-emerald-50 p-6 text-center">
+        <div role="status" className="mt-8 rounded-xl bg-emerald-50 p-6 text-center">
           <div className="mb-4 text-3xl">✓</div>
           <h3 className="font-bold text-emerald-800">Reset email sent!</h3>
           <p className="mt-2 text-sm text-emerald-700">

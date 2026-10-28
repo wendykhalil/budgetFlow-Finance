@@ -52,8 +52,9 @@ export function BudgetNew() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div>
-              <label className="text-sm font-semibold text-slate-700">Name</label>
+              <label htmlFor="budget-name" className="text-sm font-semibold text-slate-700">Name</label>
               <input
+                id="budget-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-600"
@@ -61,8 +62,9 @@ export function BudgetNew() {
               />
             </div>
             <div>
-              <label className="text-sm font-semibold text-slate-700">Category</label>
+              <label htmlFor="budget-category" className="text-sm font-semibold text-slate-700">Category</label>
               <select
+                id="budget-category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-600"
@@ -76,10 +78,11 @@ export function BudgetNew() {
               </select>
             </div>
             <div className="md:col-span-2">
-              <label className="text-sm font-semibold text-slate-700">Budget limit</label>
+              <label htmlFor="budget-limit" className="text-sm font-semibold text-slate-700">Budget limit</label>
               <div className="relative mt-2">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">€</span>
                 <input
+                  id="budget-limit"
                   type="number"
                   value={limit}
                   onChange={(e) => setLimit(e.target.value)}

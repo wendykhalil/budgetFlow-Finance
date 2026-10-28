@@ -51,11 +51,13 @@ export function AdminReports() {
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-3">
           <input
+            aria-label="Start date"
             type="date"
             className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none"
             defaultValue="2026-10-01"
           />
           <input
+            aria-label="End date"
             type="date"
             className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none"
             defaultValue="2026-10-31"

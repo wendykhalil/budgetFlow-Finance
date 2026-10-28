@@ -94,6 +94,8 @@ export function ClientNotifications() {
                   </button>
                 )}
                 <button
+                  type="button"
+                  aria-label={`Delete notification: ${n.title}`}
                   onClick={() => deleteNotification(n.id)}
                   className="text-slate-400 hover:text-rose-600"
                 >

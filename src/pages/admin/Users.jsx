@@ -63,6 +63,7 @@ export function AdminUsers() {
         </div>
         <div className="flex flex-wrap gap-3">
           <select
+            aria-label="Filter by user status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none"
@@ -73,6 +74,7 @@ export function AdminUsers() {
             <option value="pending">Pending</option>
           </select>
           <select
+            aria-label="Filter by user role"
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
             className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none"
@@ -124,12 +126,16 @@ export function AdminUsers() {
                 </td>
                 <td className="flex items-center justify-end gap-2">
                   <button
+                    type="button"
+                    aria-label={`View ${u.firstName} ${u.lastName}`}
                     onClick={() => navigate(`/admin/users/${u.id}`)}
                     className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50"
                   >
                     <Icon name="eye" className="size-4" />
                   </button>
                   <button
+                    type="button"
+                    aria-label={`${u.status === 'suspended' ? 'Reactivate' : 'Suspend'} ${u.firstName} ${u.lastName}`}
                     onClick={() => handleSuspend(u.id)}
                     className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50"
                   >
@@ -149,6 +155,8 @@ export function AdminUsers() {
             <button
               key={page}
               onClick={() => setCurrentPage(page)}
+              aria-label={`Go to page ${page}`}
+              aria-current={page === currentPage ? 'page' : undefined}
               className={`grid size-8 place-items-center rounded-xl text-sm font-semibold ${
                 page === currentPage
                   ? 'bg-[#155C4F] text-white'

@@ -4,6 +4,7 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Card from '@/components/ui/Card'
 import Icon from '@/components/ui/Icon'
+import { ConfirmModal } from '@/components/ui/Modal'
 import { categories } from '@/data/mockCategories'
 
 export function AdminCategories() {
@@ -63,6 +64,8 @@ export function AdminCategories() {
                 <td className="flex items-center justify-end gap-2">
                   <Button variant="ghost" size="sm">Edit</Button>
                   <button
+                    type="button"
+                    aria-label={`Delete ${c.name} category`}
                     onClick={() => setShowDeleteModal(c.id)}
                     className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50"
                   >
@@ -75,28 +78,15 @@ export function AdminCategories() {
         </table>
       </Card>
 
-      {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="rounded-2xl bg-white p-6 shadow-xl max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold">Delete category?</h3>
-            <p className="mt-2 text-sm text-slate-500">
-              This action cannot be undone. All transactions in this category will be affected.
-            </p>
-            <div className="mt-6 flex justify-end gap-3">
-              <Button variant="secondary" size="sm" onClick={() => setShowDeleteModal(null)}>
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={() => handleDelete(showDeleteModal)}
-              >
-                Delete category
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        isOpen={Boolean(showDeleteModal)}
+        onClose={() => setShowDeleteModal(null)}
+        onConfirm={() => handleDelete(showDeleteModal)}
+        title="Delete category?"
+        message="This action cannot be undone. All transactions in this category will be affected."
+        confirmText="Delete category"
+        danger
+      />
     </>
   )
 }

@@ -64,6 +64,7 @@ export function TransactionNew() {
               <button
                 type="button"
                 onClick={() => setType('income')}
+                aria-pressed={type === 'income'}
                 className={`flex-1 rounded-xl border px-4 py-3 text-center text-sm font-semibold transition ${
                   type === 'income'
                     ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
@@ -75,6 +76,7 @@ export function TransactionNew() {
               <button
                 type="button"
                 onClick={() => setType('expense')}
+                aria-pressed={type === 'expense'}
                 className={`flex-1 rounded-xl border px-4 py-3 text-center text-sm font-semibold transition ${
                   type === 'expense'
                     ? 'border-rose-500 bg-rose-50 text-rose-700'

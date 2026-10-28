@@ -52,7 +52,7 @@ export function ClientSettings() {
                 <div className="mt-1 text-sm text-slate-500">{d}</div>
               </div>
               <label className="relative mt-1 inline-flex cursor-pointer items-center">
-                <input type="checkbox" className="peer sr-only" defaultChecked />
+                <input type="checkbox" aria-label={`Enable ${t} settings`} className="peer sr-only" defaultChecked />
                 <span className="h-6 w-11 rounded-full bg-slate-200 peer-checked:bg-[#155C4F] after:absolute after:left-1 after:top-1 after:size-4 after:rounded-full after:bg-white after:transition peer-checked:after:translate-x-5" />
               </label>
             </div>

@@ -112,7 +112,7 @@ export function Register() {
           value={formData.confirmPassword}
           onChange={(e) => handleChange('confirmPassword', e.target.value)}
         />
-        {error && <p className="text-sm text-rose-600">{error}</p>}
+        {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
         <Button type="submit" disabled={loading} className="w-full">
           {loading ? 'Creating account...' : 'Create account'}
         </Button>

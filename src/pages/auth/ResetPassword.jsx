@@ -49,7 +49,7 @@ export function ResetPassword() {
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
         />
-        {error && <p className="text-sm text-rose-600">{error}</p>}
+        {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
         <Button type="submit" disabled={loading || !password} className="w-full">
           {loading ? 'Updating...' : 'Update password'}
         </Button>

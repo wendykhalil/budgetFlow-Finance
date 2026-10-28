@@ -58,6 +58,8 @@ export function ClientBudgets() {
                   <Icon name="tag" className="size-5" />
                 </span>
                 <button
+                  type="button"
+                  aria-label={`Delete ${b.name} budget`}
                   onClick={() => handleDelete(b.id)}
                   className="text-slate-400 hover:text-slate-600"
                 >
