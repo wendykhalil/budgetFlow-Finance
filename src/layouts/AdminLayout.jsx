@@ -1,3 +1,4 @@
+import { useCallback, useRef, useState } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import Sidebar from '@/components/layout/Sidebar'
@@ -6,6 +7,13 @@ import Header from '@/components/layout/Header'
 export function AdminLayout() {
   const { user, loading } = useAuth()
   const location = useLocation()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const menuButtonRef = useRef(null)
+
+  const closeMobileMenu = useCallback((restoreFocus = true) => {
+    setMobileMenuOpen(false)
+    if (restoreFocus) menuButtonRef.current?.focus()
+  }, [])
 
   if (loading) {
     return <div className="flex h-screen items-center justify-center">Loading...</div>
@@ -31,12 +39,20 @@ export function AdminLayout() {
   ]
 
   return (
-    <div className="min-h-screen bg-[#F4F7F6] text-slate-900">
-      <div className="fixed inset-y-0 left-0 z-40 w-64">
-        <Sidebar navItems={adminNav} role="admin" />
-      </div>
-      <div className="lg:pl-64">
-        <Header role="admin" />
+    <div className="min-h-screen min-w-0 bg-[#F4F7F6] text-slate-900">
+      <Sidebar
+        navItems={adminNav}
+        role="admin"
+        mobileOpen={mobileMenuOpen}
+        onClose={closeMobileMenu}
+      />
+      <div className="min-w-0 lg:pl-64">
+        <Header
+          role="admin"
+          mobileMenuOpen={mobileMenuOpen}
+          onToggleMobileMenu={() => setMobileMenuOpen((open) => !open)}
+          menuButtonRef={menuButtonRef}
+        />
         <main className="p-4 md:p-7 lg:p-8">
           <Outlet />
         </main>
