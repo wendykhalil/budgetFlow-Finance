@@ -5,6 +5,7 @@ import Register from '@/pages/auth/Register'
 import ForgotPassword from '@/pages/auth/ForgotPassword'
 import ResetPassword from '@/pages/auth/ResetPassword'
 import Unauthorized from '@/pages/auth/Unauthorized'
+import NotFound from '@/pages/auth/NotFound'
 
 import ClientLayout from '@/layouts/ClientLayout'
 import AdminLayout from '@/layouts/AdminLayout'
@@ -55,6 +56,7 @@ function App() {
         <Route path="/client/transactions" element={<ClientTransactions />} />
         <Route path="/client/transactions/new" element={<ClientTransactionNew />} />
         <Route path="/client/transactions/:id" element={<ClientTransactionDetails />} />
+        <Route path="/client/transactions/:id/edit" element={<ClientTransactionNew />} />
         <Route path="/client/budgets" element={<ClientBudgets />} />
         <Route path="/client/budgets/new" element={<ClientBudgetNew />} />
         <Route path="/client/budgets/:id" element={<ClientBudgetDetails />} />
@@ -80,7 +82,7 @@ function App() {
         <Route index element={<Navigate to="/admin/dashboard" replace />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   )
 }

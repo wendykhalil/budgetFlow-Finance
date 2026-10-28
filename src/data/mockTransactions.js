@@ -140,7 +140,7 @@ const formatCurrency = (amount) => {
 }
 
 const formatAmount = (amount) => {
-  const sign = amount >= 0 ? '+' : ''
+  const sign = amount >= 0 ? '+' : '−'
   const formatted = new Intl.NumberFormat('de-DE', {
     style: 'decimal',
     minimumFractionDigits: 2,

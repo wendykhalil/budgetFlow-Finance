@@ -1,6 +1,6 @@
 import { useId } from 'react'
 
-export function Select({ label, options, defaultValue, value, onChange, className = '', error = '', id }) {
+export function Select({ label, options, defaultValue, value, onChange, className = '', error = '', id, disabled = false }) {
   const generatedId = useId()
   const selectId = id || generatedId
   const errorId = error ? `${selectId}-error` : undefined
@@ -13,7 +13,8 @@ export function Select({ label, options, defaultValue, value, onChange, classNam
         value={value}
         defaultValue={defaultValue}
         onChange={onChange}
-        className={`w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-50 ${error ? 'border-rose-300' : ''} ${className}`}
+        disabled={disabled}
+        className={`w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 ${error ? 'border-rose-300' : ''} ${className}`}
         aria-invalid={error ? 'true' : undefined}
         aria-describedby={errorId}
       >

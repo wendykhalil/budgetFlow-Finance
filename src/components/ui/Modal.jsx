@@ -109,7 +109,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', footer })
   )
 }
 
-export function ConfirmModal({ isOpen, onClose, onConfirm, title, message, confirmText = 'Confirm', cancelText = 'Cancel', danger = false }) {
+export function ConfirmModal({ isOpen, onClose, onConfirm, title, message, confirmText = 'Confirm', cancelText = 'Cancel', danger = false, confirmDisabled = false }) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
       <p className="text-sm text-slate-600">{message}</p>
@@ -121,6 +121,7 @@ export function ConfirmModal({ isOpen, onClose, onConfirm, title, message, confi
           {cancelText}
         </button>
         <button
+          disabled={confirmDisabled}
           onClick={() => {
             onConfirm()
             onClose()

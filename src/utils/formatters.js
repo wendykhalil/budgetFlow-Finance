@@ -1,5 +1,5 @@
 export function formatCurrency(amount) {
-  const sign = amount >= 0 ? '+' : ''
+  const sign = amount > 0 ? '+' : amount < 0 ? '-' : ''
   const abs = Math.abs(amount)
   const formatted = new Intl.NumberFormat('de-DE', {
     style: 'decimal',

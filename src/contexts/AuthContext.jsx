@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { demoAccounts, findUserByEmail } from '@/data/mockUsers'
+import { getRegisteredUsers, saveRegisteredUsers } from '@/data/registeredUsers'
 
 const AuthContext = createContext(null)
 
@@ -11,28 +12,11 @@ export const useAuth = () => {
   return context
 }
 
-const USERS_KEY = 'budgetflow_users'
 const SESSION_KEY = 'budgetflow_session'
 
-const loadUsers = () => {
-  const stored = localStorage.getItem(USERS_KEY)
-  if (stored) {
-    try {
-      return JSON.parse(stored)
-    } catch {
-      return []
-    }
-  }
-  return []
-}
-
-const saveUsers = (users) => {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users))
-}
-
 const getUserFromStorage = (email, password) => {
-  const users = loadUsers()
-  return users.find((u) => u.email === email && u.password === password)
+  const users = getRegisteredUsers()
+  return users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password)
 }
 
 const getDemoUser = (email, password) => {
@@ -51,6 +35,9 @@ const getAuthUser = (user) => ({
   firstName: user.firstName,
   lastName: user.lastName,
   email: user.email,
+  phone: user.phone || '',
+  country: user.country || '',
+  currency: user.currency || 'EUR',
   role: user.role,
   avatar: user.avatar,
   avatarColor: user.avatarColor,
@@ -84,6 +71,9 @@ export const AuthProvider = ({ children }) => {
         firstName: storedUser.firstName,
         lastName: storedUser.lastName,
         email: storedUser.email,
+        phone: storedUser.phone || '',
+        country: storedUser.country || '',
+        currency: storedUser.currency || 'EUR',
         role: storedUser.role,
         avatar: storedUser.avatar,
         avatarColor: storedUser.avatarColor,
@@ -109,16 +99,28 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem(SESSION_KEY)
   }
 
+  const updateProfile = (profile) => {
+    setUser((currentUser) => currentUser ? {
+      ...currentUser,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      phone: profile.phone,
+      country: profile.country,
+      avatar: `${profile.firstName[0]}${profile.lastName[0]}`.toUpperCase(),
+    } : currentUser)
+  }
+
   const register = (formData) => {
-    const users = loadUsers()
-    if (users.find((u) => u.email === formData.email)) {
+    const users = getRegisteredUsers()
+    const email = formData.email.trim().toLowerCase()
+    if (users.some((u) => u.email.toLowerCase() === email) || findUserByEmail(email)) {
       return { success: false, error: 'Email already registered' }
     }
     const newUser = {
-      id: `usr_${Date.now()}`,
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      email: formData.email,
+      id: `usr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      firstName: formData.firstName.trim(),
+      lastName: formData.lastName.trim(),
+      email,
       phone: formData.phone || '',
       password: formData.password,
       role: 'client',
@@ -131,7 +133,7 @@ export const AuthProvider = ({ children }) => {
       transactionsCount: 0,
     }
     users.push(newUser)
-    saveUsers(users)
+    saveRegisteredUsers(users)
     return { success: true, user: newUser }
   }
 
@@ -140,6 +142,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     login,
     logout,
+    updateProfile,
     register,
     isAuthenticated: !!user,
     isClient: user?.role === 'client',
