@@ -40,7 +40,7 @@ export function DonutChart({ data, innerText, innerSubtext, height = 200, classN
           </text>
         )}
       </svg>
-      <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-6 text-xs">
+      <div className="absolute bottom-0 left-0 right-0 flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs">
         {data.map((d) => (
           <span key={d.name} className="flex items-center gap-1.5">
             <i className="size-2 rounded-full" style={{ background: d.color }} />

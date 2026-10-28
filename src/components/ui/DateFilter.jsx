@@ -1,6 +1,6 @@
 import Icon from './Icon.jsx'
 
-export function DateFilter({ value = 'this-month', onChange, className = '' }) {
+export function DateFilter({ value = 'this-month', onChange, className = '', label = 'Date range' }) {
   const options = [
     { value: 'this-month', label: 'This Month' },
     { value: 'last-month', label: 'Last Month' },
@@ -15,6 +15,7 @@ export function DateFilter({ value = 'this-month', onChange, className = '' }) {
       <select
         value={value}
         onChange={(e) => onChange?.(e.target.value)}
+        aria-label={label}
         className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-9 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-50"
       >
         {options.map((opt) => (

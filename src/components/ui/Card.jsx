@@ -8,7 +8,7 @@ export function Card({ children, className = '', padding = 'md', hover = false }
 
   return (
     <section
-      className={`rounded-2xl border border-slate-200/70 bg-white shadow-sm ${paddings[padding]} ${hover ? 'transition-shadow hover:shadow-md' : ''} ${className}`}
+      className={`min-w-0 rounded-2xl border border-slate-200/70 bg-white shadow-sm ${paddings[padding]} ${hover ? 'transition-shadow hover:shadow-md' : ''} ${className}`}
     >
       {children}
     </section>

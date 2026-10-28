@@ -19,6 +19,7 @@ export function Avatar({ initials, size = 'md', color = 'amber' }) {
 
   return (
     <span
+      aria-hidden="true"
       className={`grid shrink-0 place-items-center rounded-xl font-bold ${sizeClasses[size]} ${classes}`}
     >
       {initials}

@@ -31,6 +31,8 @@ export function Pagination({ currentPage, totalPages, onPageChange, totalItems, 
             <button
               key={page}
               onClick={() => onPageChange?.(page)}
+              aria-label={`Go to page ${page}`}
+              aria-current={page === currentPage ? 'page' : undefined}
               className={`grid size-8 place-items-center rounded-xl text-sm font-semibold ${
                 page === currentPage
                   ? 'bg-[#155C4F] text-white'
