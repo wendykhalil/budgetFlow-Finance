@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageTitle from '@/components/layout/PageTitle'
 import Button from '@/components/ui/Button'
@@ -8,9 +8,12 @@ import Avatar from '@/components/ui/Avatar'
 import Icon from '@/components/ui/Icon'
 import SearchInput from '@/components/ui/SearchInput'
 import { mockUsers } from '@/data/mockUsers'
+import { getRegisteredUsers, updateRegisteredUser } from '@/data/registeredUsers'
+import { transactions } from '@/data/mockTransactions'
 
 export function AdminUsers() {
   const navigate = useNavigate()
+  const [users, setUsers] = useState(() => [...mockUsers, ...getRegisteredUsers()])
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [roleFilter, setRoleFilter] = useState('all')
@@ -18,11 +21,11 @@ export function AdminUsers() {
   const itemsPerPage = 10
 
   const filtered = useMemo(() => {
-    let result = [...mockUsers]
+    let result = [...users]
     if (search) {
       const s = search.toLowerCase()
       result = result.filter(
-        (u) => u.firstName.toLowerCase().includes(s) || u.email.toLowerCase().includes(s)
+        (u) => `${u.firstName} ${u.lastName}`.toLowerCase().includes(s) || u.email.toLowerCase().includes(s)
       )
     }
     if (statusFilter !== 'all') {
@@ -32,27 +35,42 @@ export function AdminUsers() {
       result = result.filter((u) => u.role === roleFilter)
     }
     return result
-  }, [search, statusFilter, roleFilter])
+  }, [users, search, statusFilter, roleFilter])
 
   const totalPages = Math.ceil(filtered.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const paginated = filtered.slice(startIndex, startIndex + itemsPerPage)
 
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search, statusFilter, roleFilter])
+
+  useEffect(() => {
+    const lastPage = Math.max(1, Math.ceil(filtered.length / itemsPerPage))
+    if (currentPage > lastPage) setCurrentPage(lastPage)
+  }, [currentPage, filtered.length])
+
   const handleSuspend = (id) => {
     const user = mockUsers.find((u) => u.id === id)
     if (user) {
       user.status = user.status === 'suspended' ? 'active' : 'suspended'
+    } else {
+      const registeredUser = getRegisteredUsers().find((entry) => entry.id === id)
+      if (registeredUser) {
+        updateRegisteredUser(id, { status: registeredUser.status === 'suspended' ? 'active' : 'suspended' })
+      }
     }
+    setUsers([...mockUsers, ...getRegisteredUsers()])
   }
 
   return (
     <>
       <PageTitle
         title="Users management"
-        sub={`Manage ${mockUsers.length} client and administrator accounts.`}
+        sub={`Manage ${users.length} client and administrator accounts.`}
         action={
-          <Button>
-            <Icon name="plus" className="size-4" /> Add user
+          <Button disabled title="Admin user creation is unavailable in this demo">
+            <Icon name="plus" className="size-4" /> Add user unavailable
           </Button>
         }
       />
@@ -98,7 +116,9 @@ export function AdminUsers() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {paginated.map((u) => (
+            {paginated.length === 0 ? (
+              <tr><td colSpan={6} className="py-12 text-center text-sm text-slate-500">No users match these filters.</td></tr>
+            ) : paginated.map((u) => (
               <tr key={u.id}>
                 <td className="flex items-center gap-3 px-5 py-4">
                   <Avatar initials={u.avatar} color={u.avatarColor} size="sm" />
@@ -120,7 +140,7 @@ export function AdminUsers() {
                     {u.status}
                   </Badge>
                 </td>
-                <td className="text-slate-500">{u.transactionsCount}</td>
+                <td className="text-slate-500">{transactions.filter((transaction) => transaction.userId === u.id).length}</td>
                 <td className="text-slate-500">
                   {new Date(u.joinedAt).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' })}
                 </td>

@@ -40,10 +40,10 @@ export function AdminReports() {
     <>
       <PageTitle
         title="Reports & analytics"
-        sub="Platform-wide performance and financial trends."
+        sub="Illustrative mock analytics. Date filtering and live reporting are unavailable."
         action={
-          <Button>
-            <Icon name="download" className="size-4" /> Export report
+          <Button disabled title="Report export is unavailable in this demo">
+            <Icon name="download" className="size-4" /> Export unavailable
           </Button>
         }
       />
@@ -53,13 +53,15 @@ export function AdminReports() {
           <input
             aria-label="Start date"
             type="date"
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none"
+            disabled
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60"
             defaultValue="2026-10-01"
           />
           <input
             aria-label="End date"
             type="date"
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none"
+            disabled
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60"
             defaultValue="2026-10-31"
           />
         </div>

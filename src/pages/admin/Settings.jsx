@@ -6,7 +6,12 @@ import Icon from '@/components/ui/Icon'
 
 export function AdminSettings() {
   const [showToast, setShowToast] = useState(false)
-
+  const [enabledSettings, setEnabledSettings] = useState(() => {
+    const savedSettings = localStorage.getItem('budgetflow_admin_settings')
+    return savedSettings
+      ? JSON.parse(savedSettings)
+      : { General: true, 'User management': true, Notifications: true, Security: true }
+  })
   const settings = [
     ['General', 'Application name, currency, and language', 'user'],
     ['User management', 'Registration, verification, and suspension', 'users'],
@@ -15,6 +20,7 @@ export function AdminSettings() {
   ]
 
   const handleSave = () => {
+    localStorage.setItem('budgetflow_admin_settings', JSON.stringify(enabledSettings))
     setShowToast(true)
     setTimeout(() => setShowToast(false), 2500)
   }
@@ -38,7 +44,7 @@ export function AdminSettings() {
                 <div className="mt-1 text-sm text-slate-500">{d}</div>
               </div>
               <label className="relative mt-1 inline-flex cursor-pointer items-center">
-                <input type="checkbox" aria-label={`Enable ${t} settings`} className="peer sr-only" defaultChecked />
+                <input type="checkbox" aria-label={`Enable ${t} settings`} className="peer sr-only" checked={Boolean(enabledSettings[t])} onChange={() => setEnabledSettings((previous) => ({ ...previous, [t]: !previous[t] }))} />
                 <span className="h-6 w-11 rounded-full bg-slate-200 peer-checked:bg-[#155C4F] after:absolute after:left-1 after:top-1 after:size-4 after:rounded-full after:bg-white after:transition peer-checked:after:translate-x-5" />
               </label>
             </div>
@@ -55,7 +61,7 @@ export function AdminSettings() {
           <span className="grid size-6 place-items-center rounded-full bg-emerald-500">
             <Icon name="check" className="size-4" />
           </span>
-          Admin settings saved successfully.
+          Admin settings saved on this device.
         </div>
       )}
     </>

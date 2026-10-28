@@ -5,17 +5,25 @@ import SummaryCard from '@/components/layout/SummaryCard'
 import BarChart from '@/components/charts/BarChart'
 import Card from '@/components/ui/Card'
 import { mockUsers } from '@/data/mockUsers'
+import { getRegisteredUsers } from '@/data/registeredUsers'
+import { transactions } from '@/data/mockTransactions'
+import { budgets } from '@/data/mockBudgets'
 
 export function AdminDashboard() {
-  const totalUsers = mockUsers.length
-  const activeUsers = mockUsers.filter((u) => u.status === 'active').length
+  const allUsers = [...mockUsers, ...getRegisteredUsers()]
+  const totalUsers = allUsers.length
+  const activeUsers = allUsers.filter((u) => u.status === 'active').length
+  const suspendedUsers = allUsers.filter((u) => u.status === 'suspended').length
+  const inactiveUsers = totalUsers - activeUsers - suspendedUsers
+  const totalTransactionVolume = transactions.reduce((sum, transaction) => sum + transaction.amount, 0)
+  const formattedVolume = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(totalTransactionVolume)
   const stats = [
-    { label: 'Total users', value: totalUsers.toLocaleString(), change: '+12.4%', icon: 'users', tone: 'bg-blue-50 text-blue-700' },
-    { label: 'Active users', value: activeUsers.toLocaleString(), change: '+8.6%', icon: 'activity', tone: 'bg-emerald-50 text-emerald-700' },
-    { label: 'Total transactions', value: '48,920', change: '+15.2%', icon: 'card', tone: 'bg-violet-50 text-violet-700' },
-    { label: 'Transaction volume', value: '€3,845,620', change: '+11.8%', icon: 'chart', tone: 'bg-amber-50 text-amber-700' },
-    { label: 'Total budgets', value: '4,820', change: '+9.3%', icon: 'wallet', tone: 'bg-rose-50 text-rose-700' },
-    { label: 'Monthly growth', value: '12.4%', change: '+3.1%', icon: 'report', tone: 'bg-cyan-50 text-cyan-700' },
+    { label: 'Total users', value: totalUsers.toLocaleString(), change: 'Mock records', icon: 'users', tone: 'bg-blue-50 text-blue-700' },
+    { label: 'Active users', value: activeUsers.toLocaleString(), change: 'Mock records', icon: 'activity', tone: 'bg-emerald-50 text-emerald-700' },
+    { label: 'Total transactions', value: transactions.length.toLocaleString(), change: 'Mock records', icon: 'card', tone: 'bg-violet-50 text-violet-700' },
+    { label: 'Transaction volume', value: formattedVolume, change: 'Mock records', icon: 'chart', tone: 'bg-amber-50 text-amber-700' },
+    { label: 'Total budgets', value: budgets.length.toLocaleString(), change: 'Mock records', icon: 'wallet', tone: 'bg-rose-50 text-rose-700' },
+    { label: 'Monthly growth', value: 'Unavailable', change: 'No historical data', icon: 'report', tone: 'bg-cyan-50 text-cyan-700' },
   ]
 
   const chartData = [
@@ -31,10 +39,10 @@ export function AdminDashboard() {
     <>
       <PageTitle
         title="Administration dashboard"
-        sub="Platform health and activity overview for October 2026."
+        sub="Platform overview from current mock records; historical analytics and export are unavailable."
         action={
-          <Button variant="secondary" size="sm">
-            <Icon name="download" className="size-4" /> Export overview
+          <Button variant="secondary" size="sm" disabled title="Overview export is unavailable in this demo">
+            <Icon name="download" className="size-4" /> Export unavailable
           </Button>
         }
       />
@@ -55,6 +63,7 @@ export function AdminDashboard() {
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.5fr_1fr]">
         <Card>
           <div className="font-bold">Transaction volume</div>
+          <div className="text-xs text-slate-400">Illustrative chart data</div>
           <div className="mt-7">
             <BarChart
               data={chartData}
@@ -71,10 +80,12 @@ export function AdminDashboard() {
           <div className="font-bold">User activity</div>
           <div className="mt-6 space-y-5">
             {[
-              ['Active users', '2,214', 87],
-              ['Inactive users', '286', 11],
-              ['Suspended', '48', 2],
-            ].map(([label, value, pct]) => (
+              ['Active users', activeUsers],
+              ['Inactive users', inactiveUsers],
+              ['Suspended', suspendedUsers],
+            ].map(([label, value]) => {
+              const pct = totalUsers ? (value / totalUsers) * 100 : 0
+              return (
               <div key={label}>
                 <div className="mb-2 flex justify-between text-sm">
                   <span>{label}</span>
@@ -84,7 +95,8 @@ export function AdminDashboard() {
                   <div className="h-2 rounded bg-emerald-600" style={{ width: `${pct}%` }} />
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         </Card>
       </div>

@@ -6,12 +6,29 @@ import Card from '@/components/ui/Card'
 import Icon from '@/components/ui/Icon'
 import { ConfirmModal } from '@/components/ui/Modal'
 import { categories } from '@/data/mockCategories'
+import { transactions } from '@/data/mockTransactions'
+import { budgets } from '@/data/mockBudgets'
 
 export function AdminCategories() {
   const [catList, setCatList] = useState(categories)
   const [showDeleteModal, setShowDeleteModal] = useState(null)
+  const [deleteError, setDeleteError] = useState('')
+  const selectedCategory = catList.find((category) => category.id === showDeleteModal)
+  const selectedCategoryInUse = selectedCategory && (
+    transactions.some((transaction) => transaction.category === selectedCategory.name) ||
+    budgets.some((budget) => budget.category === selectedCategory.name)
+  )
 
   const handleDelete = (id) => {
+    const category = catList.find((c) => c.id === id)
+    if (category && (
+      transactions.some((transaction) => transaction.category === category.name) ||
+      budgets.some((budget) => budget.category === category.name)
+    )) {
+      setDeleteError(`${category.name} is used by transactions or budgets and cannot be deleted.`)
+      setShowDeleteModal(null)
+      return
+    }
     const idx = catList.findIndex((c) => c.id === id)
     if (idx !== -1) {
       catList.splice(idx, 1)
@@ -25,8 +42,9 @@ export function AdminCategories() {
       <PageTitle
         title="Categories"
         sub="Manage platform-wide transaction categories."
-        action={<Button>Add category</Button>}
+        action={<Button disabled title="Category creation is unavailable in this demo">Add category unavailable</Button>}
       />
+      {deleteError && <p role="alert" className="mb-4 text-sm text-rose-600">{deleteError}</p>}
 
       <Card className="overflow-x-auto p-0">
         <table className="w-full min-w-150 text-left text-sm">
@@ -60,9 +78,9 @@ export function AdminCategories() {
                     {c.color}
                   </div>
                 </td>
-                <td className="text-slate-500">{c.transactionCount || 0}</td>
+                <td className="text-slate-500">{transactions.filter((transaction) => transaction.category === c.name).length}</td>
                 <td className="flex items-center justify-end gap-2">
-                  <Button variant="ghost" size="sm">Edit</Button>
+                  <Button variant="ghost" size="sm" disabled title="Category editing is unavailable in this demo">Edit unavailable</Button>
                   <button
                     type="button"
                     aria-label={`Delete ${c.name} category`}
@@ -83,8 +101,11 @@ export function AdminCategories() {
         onClose={() => setShowDeleteModal(null)}
         onConfirm={() => handleDelete(showDeleteModal)}
         title="Delete category?"
-        message="This action cannot be undone. All transactions in this category will be affected."
-        confirmText="Delete category"
+        message={selectedCategoryInUse
+          ? `${selectedCategory.name} is used by transactions or budgets and cannot be deleted.`
+          : 'This action cannot be undone.'}
+        confirmText={selectedCategoryInUse ? 'Category in use' : 'Delete category'}
+        confirmDisabled={Boolean(selectedCategoryInUse)}
         danger
       />
     </>

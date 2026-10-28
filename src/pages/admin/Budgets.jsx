@@ -1,20 +1,24 @@
-import { useState } from 'react'
 import PageTitle from '@/components/layout/PageTitle'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
-import Icon from '@/components/ui/Icon'
 import SummaryCard from '@/components/layout/SummaryCard'
-import BarChart from '@/components/charts/BarChart'
+import { budgets } from '@/data/mockBudgets'
+import { getUserById } from '@/data/mockUsers'
+import { getRegisteredUsers } from '@/data/registeredUsers'
 
 export function AdminBudgets() {
-  const mockBudgets = [
-    { id: 1, user: 'Alex Martin', category: 'Food', limit: 500, spent: 420, progress: 84 },
-    { id: 2, user: 'Sarah Wilson', category: 'Transport', limit: 350, spent: 280, progress: 80 },
-    { id: 3, user: 'John Smith', category: 'Shopping', limit: 300, spent: 286, progress: 95 },
-    { id: 4, user: 'Emma Johnson', category: 'Housing', limit: 750, spent: 750, progress: 100 },
-    { id: 5, user: 'Michael Brown', category: 'Entertainment', limit: 250, spent: 295, progress: 118 },
-    { id: 6, user: 'Alex Martin', category: 'Utilities', limit: 300, spent: 240, progress: 80 },
-  ]
+  const registeredUsers = getRegisteredUsers()
+  const platformBudgets = budgets.map((budget) => {
+    const owner = getUserById(budget.userId) || registeredUsers.find((user) => user.id === budget.userId)
+    return {
+      ...budget,
+      user: owner ? `${owner.firstName} ${owner.lastName}` : 'Unknown user',
+      avatar: owner?.avatar || '—',
+      progress: (budget.spent / budget.limit) * 100,
+    }
+  })
+  const healthyCount = platformBudgets.filter((budget) => budget.progress < 85).length
+  const exceededCount = platformBudgets.filter((budget) => budget.progress >= 100).length
 
   return (
     <>
@@ -24,9 +28,9 @@ export function AdminBudgets() {
       />
 
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryCard label="Total budgets" value="4,820" change="+9.3%" icon="wallet" tone="bg-rose-50 text-rose-700" />
-        <SummaryCard label="Healthy" value="3,384" change="70.2%" icon="check" tone="bg-emerald-50 text-emerald-700" />
-        <SummaryCard label="Exceeded" value="482" change="+5.1%" icon="alert-triangle" tone="bg-rose-50 text-rose-700" />
+        <SummaryCard label="Total budgets" value={platformBudgets.length.toLocaleString()} change="Current mock records" icon="wallet" tone="bg-rose-50 text-rose-700" />
+        <SummaryCard label="Healthy" value={healthyCount.toLocaleString()} change="Current mock records" icon="check" tone="bg-emerald-50 text-emerald-700" />
+        <SummaryCard label="Exceeded" value={exceededCount.toLocaleString()} change="Current mock records" icon="alert-triangle" tone="bg-rose-50 text-rose-700" />
       </div>
 
       <Card className="overflow-x-auto p-0">
@@ -39,14 +43,16 @@ export function AdminBudgets() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {mockBudgets.map((b) => {
+            {platformBudgets.length === 0 ? (
+              <tr><td colSpan={8} className="py-12 text-center text-sm text-slate-500">No budgets are available.</td></tr>
+            ) : platformBudgets.map((b) => {
               const remaining = b.limit - b.spent
               const isExceeded = b.progress >= 100
               return (
                 <tr key={b.id}>
                   <td className="flex items-center gap-3 px-5 py-4">
-                    <span className="grid size-8 place-items-center rounded-full bg-amber-100 text-xs font-bold text-amber-800">
-                      AM
+                    <span className="grid size-8 place-items-center rounded-full bg-amber-100 text-xs font-bold text-amber-800" aria-hidden="true">
+                      {b.avatar}
                     </span>
                     {b.user}
                   </td>
@@ -54,7 +60,7 @@ export function AdminBudgets() {
                   <td className="px-5 py-4">€{b.limit.toLocaleString()}</td>
                   <td className="px-5 py-4">€{b.spent.toLocaleString()}</td>
                   <td className={`px-5 py-4 font-bold ${remaining >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    €{remaining.toLocaleString()}
+                    {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(remaining)}
                   </td>
                   <td className="px-5 py-4">
                     <div className="h-2 w-20 rounded-full bg-slate-100">
@@ -70,7 +76,7 @@ export function AdminBudgets() {
                     </span>
                   </td>
                   <td className="px-5 py-4">
-                    <Button variant="ghost" size="sm">View</Button>
+                    <Button variant="ghost" size="sm" disabled title="Budget details are unavailable in admin view">View unavailable</Button>
                   </td>
                 </tr>
               )

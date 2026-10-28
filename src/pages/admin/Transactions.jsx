@@ -6,6 +6,8 @@ import Card from '@/components/ui/Card'
 import Icon from '@/components/ui/Icon'
 import SearchInput from '@/components/ui/SearchInput'
 import { transactions } from '@/data/mockTransactions'
+import { getUserById } from '@/data/mockUsers'
+import { getRegisteredUsers } from '@/data/registeredUsers'
 
 export function AdminTransactions() {
   const [search, setSearch] = useState('')
@@ -23,6 +25,9 @@ export function AdminTransactions() {
     if (typeFilter !== 'all') {
       result = result.filter((t) => t.type === typeFilter)
     }
+    if (statusFilter !== 'all') {
+      result = result.filter((t) => t.status === statusFilter)
+    }
     return result
   }, [search, typeFilter, statusFilter])
 
@@ -31,16 +36,38 @@ export function AdminTransactions() {
       <PageTitle
         title="Transactions management"
         sub="Review platform-wide transaction activity."
-        action={<Button>Add record</Button>}
+        action={<Button disabled title="Admin transaction creation is unavailable in this demo">Add record unavailable</Button>}
       />
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex-1 min-w-48">
           <SearchInput placeholder="Search transactions..." value={search} onChange={setSearch} />
         </div>
-        <Button variant="secondary" size="sm">
-          <Icon name="download" className="size-4" /> Export
-        </Button>
+        <div className="flex flex-wrap gap-3">
+          <select
+            aria-label="Filter by transaction type"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none"
+          >
+            <option value="all">All types</option>
+            <option value="income">Income</option>
+            <option value="expense">Expenses</option>
+          </select>
+          <select
+            aria-label="Filter by transaction status"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none"
+          >
+            <option value="all">All statuses</option>
+            <option value="completed">Completed</option>
+            <option value="pending">Pending</option>
+          </select>
+          <Button variant="secondary" size="sm" disabled title="Export is unavailable in this demo">
+            <Icon name="download" className="size-4" /> Export unavailable
+          </Button>
+        </div>
       </div>
 
       <Card className="overflow-x-auto p-0">
@@ -55,11 +82,15 @@ export function AdminTransactions() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filtered.map((t) => (
+            {filtered.length === 0 ? (
+              <tr><td colSpan={8} className="py-12 text-center text-sm text-slate-500">No transactions match these filters.</td></tr>
+            ) : filtered.map((t) => {
+              const owner = getUserById(t.userId) || getRegisteredUsers().find((user) => user.id === t.userId)
+              return (
               <tr key={t.id}>
                 <td className="px-5 py-4">
-                  <span className="grid size-8 place-items-center rounded-full bg-amber-100 text-xs font-bold text-amber-800">
-                    AM
+                  <span className="font-semibold">
+                    {owner ? `${owner.firstName} ${owner.lastName}` : 'Unknown user'}
                   </span>
                 </td>
                 <td className="px-5 py-4 font-semibold">{t.description}</td>
@@ -83,10 +114,11 @@ export function AdminTransactions() {
                   </Badge>
                 </td>
                 <td className="px-5 py-4">
-                  <Button variant="ghost" size="sm">View</Button>
+                  <Button variant="ghost" size="sm" disabled title="Transaction details are unavailable in admin view">View unavailable</Button>
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </Card>

@@ -28,7 +28,7 @@ export function AdminActivityLogs() {
     <>
       <PageTitle
         title="Activity & audit logs"
-        sub="Monitor administrative and user actions."
+        sub="Illustrative static sample logs; this demo does not record live activity."
       />
 
       <div className="mb-5">
