@@ -10,18 +10,19 @@ import SummaryCard from '@/components/layout/SummaryCard'
 import BarChart from '@/components/charts/BarChart'
 import DonutChart from '@/components/charts/DonutChart'
 import { transactions, formatAmount } from '@/data/mockTransactions'
-import { budgets } from '@/data/mockBudgets'
+import { budgets, getBudgetsByUser } from '@/data/mockBudgets'
 import { formatCurrency } from '@/utils/formatters'
 
 export function ClientDashboard() {
   const navigate = useNavigate()
   const { user } = useAuth()
 
-  const totalIncome = transactions.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0)
-  const totalExpenses = transactions.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+  const userTransactions = transactions.filter((t) => t.userId === user?.id)
+  const totalIncome = userTransactions.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+  const totalExpenses = userTransactions.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
   const totalBalance = totalIncome - totalExpenses
 
-  const recentTransactions = transactions.slice(0, 5)
+  const recentTransactions = userTransactions.slice(0, 5)
 
   const incomeData = [
     { month: 'May', income: 72, expense: 105 },
@@ -41,7 +42,7 @@ export function ClientDashboard() {
     { name: 'Other', value: 190, color: '#CBD5E1' },
   ]
 
-  const budgetProgress = budgets.slice(0, 6)
+  const budgetProgress = getBudgetsByUser(user?.id).slice(0, 6)
 
   return (
     <>
@@ -113,7 +114,7 @@ export function ClientDashboard() {
               <div className="font-bold">Recent transactions</div>
               <div className="text-xs text-slate-400">Your latest account activity</div>
             </div>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/client/transactions')}>
               View all <Icon name="arrow" className="size-4" />
             </Button>
           </div>
@@ -137,7 +138,7 @@ export function ClientDashboard() {
                       <Badge tone="neutral" size="sm">{t.category}</Badge>
                     </td>
                     <td className={`px-5 py-4 text-right font-bold ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-800'}`}>
-                      {formatAmount(t.amount)}
+                      {formatAmount(t.type === 'expense' ? -t.amount : t.amount)}
                     </td>
                   </tr>
                 ))}
@@ -170,7 +171,7 @@ export function ClientDashboard() {
               )
             })}
           </div>
-          <Button variant="secondary" className="mt-6 w-full">
+          <Button variant="secondary" className="mt-6 w-full" onClick={() => navigate('/client/budgets')}>
             Manage budgets
           </Button>
         </Card>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import PageTitle from '@/components/layout/PageTitle'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
@@ -8,23 +9,30 @@ import { categories } from '@/data/mockCategories'
 
 export function BudgetNew() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [name, setName] = useState('')
   const [limit, setLimit] = useState('')
   const [category, setCategory] = useState('')
+  const [error, setError] = useState('')
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (!name || !limit) return
+    const parsedLimit = Number(limit)
+    if (!name.trim() || !Number.isFinite(parsedLimit) || parsedLimit <= 0 || !category) {
+      setError('Enter a budget name, a positive limit, and a category.')
+      return
+    }
+    setError('')
 
     const newBudget = {
       id: `bud_${Date.now()}`,
-      name,
+      name: name.trim(),
       category,
-      limit: parseFloat(limit),
+      limit: parsedLimit,
       spent: 0,
       color: '#277666',
       icon: 'tag',
-      userId: 'usr_001',
+      userId: user.id,
       period: 'monthly',
     }
 
@@ -33,7 +41,7 @@ export function BudgetNew() {
   }
 
   const categoryOptions = categories
-    .filter((c) => c.type === 'expense')
+    .filter((c) => c.type === 'expense' && c.userId === user?.id)
     .map((c) => ({ value: c.name, label: c.name }))
 
   return (
@@ -84,6 +92,8 @@ export function BudgetNew() {
                 <input
                   id="budget-limit"
                   type="number"
+                  min="0.01"
+                  step="0.01"
                   value={limit}
                   onChange={(e) => setLimit(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 px-4 py-3 pl-10 text-sm text-slate-900 outline-none focus:border-emerald-600"
@@ -92,6 +102,8 @@ export function BudgetNew() {
               </div>
             </div>
           </div>
+
+          {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
 
           <div className="flex justify-end gap-3 pt-6">
             <Button variant="secondary" onClick={() => navigate('/client/budgets')}>

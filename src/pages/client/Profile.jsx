@@ -10,16 +10,23 @@ import Icon from '@/components/ui/Icon'
 import { getUserDisplayName, getUserInitials } from '@/utils/userIdentity'
 
 export function ClientProfile() {
-  const { user, login } = useAuth()
+  const { user, updateProfile } = useAuth()
   const [firstName, setFirstName] = useState(user?.firstName || '')
   const [lastName, setLastName] = useState(user?.lastName || '')
   const [email, setEmail] = useState(user?.email || '')
-  const [phone, setPhone] = useState('+33 6 12 34 56 78')
-  const [currency, setCurrency] = useState('EUR')
-  const [country, setCountry] = useState('France')
+  const [phone, setPhone] = useState(user?.phone || '')
+  const [currency] = useState(user?.currency || 'EUR')
+  const [country, setCountry] = useState(user?.country || '')
   const [showToast, setShowToast] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   const handleSave = () => {
+    if (!firstName.trim() || !lastName.trim()) {
+      setSaveError('First name and last name are required.')
+      return
+    }
+    setSaveError('')
+    updateProfile({ firstName: firstName.trim(), lastName: lastName.trim(), phone, country })
     setShowToast(true)
     setTimeout(() => setShowToast(false), 2500)
   }
@@ -79,8 +86,9 @@ export function ClientProfile() {
             />
           </div>
 
+          {saveError && <p role="alert" className="mt-4 text-sm text-rose-600">{saveError}</p>}
           <div className="mt-6 flex justify-end gap-3">
-            <Button variant="secondary">Change password</Button>
+            <Button variant="secondary" disabled title="Password changes require a backend service">Password change unavailable</Button>
             <Button onClick={handleSave}>Save profile</Button>
           </div>
         </Card>
@@ -91,7 +99,7 @@ export function ClientProfile() {
           <span className="grid size-6 place-items-center rounded-full bg-emerald-500">
             <Icon name="check" className="size-4" />
           </span>
-          Profile updated successfully.
+          Profile updated for this session. Changes reset after refresh.
         </div>
       )}
     </>

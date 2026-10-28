@@ -1,26 +1,28 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import PageTitle from '@/components/layout/PageTitle'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Card from '@/components/ui/Card'
 import Icon from '@/components/ui/Icon'
-import { budgets } from '@/data/mockBudgets'
+import { budgets, getBudgetsByUser } from '@/data/mockBudgets'
 import { formatCurrency } from '@/utils/formatters'
 
 export function ClientBudgets() {
   const navigate = useNavigate()
-  const [budgetList, setBudgetList] = useState(budgets)
+  const { user } = useAuth()
+  const [budgetList, setBudgetList] = useState(() => getBudgetsByUser(user?.id))
 
   const healthyCount = budgetList.filter((b) => getBudgetStatus(b.spent, b.limit) === 'healthy').length
   const warningCount = budgetList.filter((b) => getBudgetStatus(b.spent, b.limit) === 'warning').length
   const exceededCount = budgetList.filter((b) => getBudgetStatus(b.spent, b.limit) === 'exceeded').length
 
   const handleDelete = (id) => {
-    const idx = budgetList.findIndex((b) => b.id === id)
+    const idx = budgets.findIndex((b) => b.id === id && b.userId === user?.id)
     if (idx !== -1) {
-      budgetList.splice(idx, 1)
-      setBudgetList([...budgetList])
+      budgets.splice(idx, 1)
+      setBudgetList(getBudgetsByUser(user?.id))
     }
   }
 
@@ -43,7 +45,11 @@ export function ClientBudgets() {
       </div>
 
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {budgetList.map((b) => {
+        {budgetList.length === 0 ? (
+          <Card className="md:col-span-2 xl:col-span-3">
+            <p className="text-center text-sm text-slate-500">No budgets yet. Create a budget to get started.</p>
+          </Card>
+        ) : budgetList.map((b) => {
           const progress = (b.spent / b.limit) * 100
           const isExceeded = progress >= 100
           const isWarning = progress >= 85 && progress < 100
@@ -63,7 +69,7 @@ export function ClientBudgets() {
                   onClick={() => handleDelete(b.id)}
                   className="text-slate-400 hover:text-slate-600"
                 >
-                  <Icon name="more" className="size-5" />
+                  <Icon name="trash" className="size-5" />
                 </button>
               </div>
               <div className="mt-5 flex items-center justify-between">

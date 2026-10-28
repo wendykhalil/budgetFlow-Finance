@@ -1,14 +1,15 @@
 import { useState } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 import PageTitle from '@/components/layout/PageTitle'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Card from '@/components/ui/Card'
 import Icon from '@/components/ui/Icon'
-import { notifications as initialNotifications, getNotificationsByUser } from '@/data/mockNotifications'
-import { getUnreadCount } from '@/data/mockNotifications'
+import { getNotificationsByUser } from '@/data/mockNotifications'
 
 export function ClientNotifications() {
-  const [notifications, setNotifications] = useState(getNotificationsByUser('usr_001'))
+  const { user } = useAuth()
+  const [notifications, setNotifications] = useState(() => getNotificationsByUser(user?.id))
 
   const unreadCount = notifications.filter((n) => n.status === 'unread').length
 
@@ -52,8 +53,8 @@ export function ClientNotifications() {
                 Mark all as read
               </Button>
             )}
-            <Button variant="secondary" size="sm">
-              <Icon name="download" className="size-4" /> Export
+            <Button variant="secondary" size="sm" disabled title="Export is unavailable in this demo">
+              <Icon name="download" className="size-4" /> Export unavailable
             </Button>
           </div>
         }

@@ -1,40 +1,33 @@
-import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import PageTitle from '@/components/layout/PageTitle'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Card from '@/components/ui/Card'
 import Icon from '@/components/ui/Icon'
-import { categories, expenseCategories, incomeCategories } from '@/data/mockCategories'
+import { categories } from '@/data/mockCategories'
+import { transactions } from '@/data/mockTransactions'
 
 export function ClientCategories() {
-  const navigate = useNavigate()
-  const stats = [
-    ['Food', 'Expense', '24', '€420'],
-    ['Housing', 'Expense', '2', '€750'],
-    ['Transport', 'Expense', '18', '€280'],
-    ['Shopping', 'Expense', '9', '€260'],
-    ['Utilities', 'Expense', '5', '€240'],
-    ['Entertainment', 'Expense', '7', '€150'],
-    ['Salary', 'Income', '1', '€3,200'],
-    ['Freelance', 'Income', '3', '€650'],
-  ]
-
+  const { user } = useAuth()
+  const userCategories = categories.filter((category) => category.userId === user?.id)
+  const userExpenseCategories = userCategories.filter((category) => category.type === 'expense')
+  const userIncomeCategories = userCategories.filter((category) => category.type === 'income')
   return (
     <>
       <PageTitle
         title="Categories"
         sub="Organize transactions into meaningful groups."
         action={
-          <Button onClick={() => navigate('/client/categories')}>
-            <Icon name="plus" className="size-4" /> Add category
+          <Button disabled title="Category creation is unavailable in this demo">
+            <Icon name="plus" className="size-4" /> Add category unavailable
           </Button>
         }
       />
 
       <div className="mb-5 flex flex-wrap gap-3">
-        <Badge tone="neutral">All categories ({categories.length})</Badge>
-        <Badge tone="green">Income ({incomeCategories.length})</Badge>
-        <Badge tone="red">Expense ({expenseCategories.length})</Badge>
+        <Badge tone="neutral">All categories ({userCategories.length})</Badge>
+        <Badge tone="green">Income ({userIncomeCategories.length})</Badge>
+        <Badge tone="red">Expense ({userExpenseCategories.length})</Badge>
       </div>
 
       <Card className="overflow-x-auto p-0">
@@ -49,7 +42,15 @@ export function ClientCategories() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {categories.map((c, i) => (
+            {userCategories.map((c) => {
+              const categoryTransactions = transactions.filter(
+                (transaction) => transaction.userId === c.userId && transaction.category === c.name,
+              )
+              const total = categoryTransactions.reduce(
+                (sum, transaction) => sum + (transaction.type === 'income' ? transaction.amount : -transaction.amount),
+                0,
+              )
+              return (
               <tr key={c.id}>
                 <td className="flex items-center gap-3 px-5 py-4 font-bold">
                   <span
@@ -65,17 +66,18 @@ export function ClientCategories() {
                     {c.type}
                   </Badge>
                 </td>
-                <td className="text-slate-500">{c.transactionCount || Math.floor(Math.random() * 30)}</td>
+                <td className="text-slate-500">{categoryTransactions.length}</td>
                 <td className="font-semibold">
-                  {c.type === 'income' ? '+€0.00' : '-€0.00'}
+                  {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', signDisplay: 'exceptZero' }).format(total)}
                 </td>
                 <td>
-                  <Button variant="ghost" size="sm">
-                    Edit
+                  <Button variant="ghost" size="sm" disabled title="Category editing is unavailable in this demo">
+                    Edit unavailable
                   </Button>
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </Card>

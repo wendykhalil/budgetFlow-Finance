@@ -1,4 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import PageTitle from '@/components/layout/PageTitle'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -9,12 +10,24 @@ import { transactions, getTransactionById } from '@/data/mockTransactions'
 export function TransactionDetails() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const transaction = getTransactionById(id) || transactions[0]
+  const { user } = useAuth()
+  const transaction = getTransactionById(id)
+  const canView = transaction?.userId === user?.id
 
   const handleDelete = () => {
+    if (!canView) return
     const idx = transactions.findIndex((t) => t.id === id)
     if (idx !== -1) transactions.splice(idx, 1)
     navigate('/client/transactions')
+  }
+
+  if (!canView) {
+    return (
+      <Card>
+        <p className="font-semibold text-slate-900">Transaction not found.</p>
+        <Button className="mt-4" onClick={() => navigate('/client/transactions')}>Back to transactions</Button>
+      </Card>
+    )
   }
 
   return (

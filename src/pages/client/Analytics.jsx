@@ -45,7 +45,8 @@ export function ClientAnalytics() {
         sub="Understand your habits and make confident decisions."
         action={
           <Select
-            label="Analytics period"
+            label="Analytics period (preview only)"
+            disabled
             options={[
               { value: '6m', label: 'Last 6 months' },
               { value: 'month', label: 'This month' },

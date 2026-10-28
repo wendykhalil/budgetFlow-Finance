@@ -1,5 +1,5 @@
-import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import PageTitle from '@/components/layout/PageTitle'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
@@ -11,7 +11,18 @@ import { formatCurrency } from '@/utils/formatters'
 export function BudgetDetails() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const budget = budgets.find((b) => b.id === id) || budgets[0]
+  const { user } = useAuth()
+  const budget = budgets.find((b) => b.id === id && b.userId === user?.id)
+
+  if (!budget) {
+    return (
+      <Card>
+        <p className="font-semibold text-slate-900">Budget not found.</p>
+        <Button className="mt-4" onClick={() => navigate('/client/budgets')}>Back to budgets</Button>
+      </Card>
+    )
+  }
+
   const progress = getBudgetProgress(budget)
 
   return (

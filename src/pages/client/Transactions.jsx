@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import PageTitle from '@/components/layout/PageTitle'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -8,26 +9,28 @@ import Icon from '@/components/ui/Icon'
 import SearchInput from '@/components/ui/SearchInput'
 import { useToast } from '@/components/ui/Toast'
 import { transactions, formatAmount } from '@/data/mockTransactions'
-import { getCategoryById } from '@/data/mockCategories'
+import { categories } from '@/data/mockCategories'
 import { filterTransactions, paginate } from '@/utils/formatters'
 
 export function ClientTransactions() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('this-month')
   const [currentPage, setCurrentPage] = useState(1)
+  const [transactionsVersion, setTransactionsVersion] = useState(0)
   const itemsPerPage = 10
 
   const filtered = useMemo(() => {
-    return filterTransactions(transactions, {
+    return filterTransactions(transactions.filter((t) => t.userId === user?.id), {
       search,
       type: typeFilter,
       category: categoryFilter,
       date: dateFilter,
     })
-  }, [search, typeFilter, categoryFilter, dateFilter])
+  }, [search, typeFilter, categoryFilter, dateFilter, user?.id, transactionsVersion])
 
   const paginated = useMemo(() => {
     return paginate(filtered, currentPage, itemsPerPage)
@@ -37,11 +40,16 @@ export function ClientTransactions() {
     setCurrentPage(1)
   }, [filtered.length])
 
+  useEffect(() => {
+    const lastPage = Math.max(1, Math.ceil(filtered.length / itemsPerPage))
+    if (currentPage > lastPage) setCurrentPage(lastPage)
+  }, [currentPage, filtered.length])
+
   const handleDelete = (id) => {
     const idx = transactions.findIndex((t) => t.id === id)
     if (idx !== -1) {
       transactions.splice(idx, 1)
-      window.dispatchEvent(new CustomEvent('txn-deleted', { detail: id }))
+      setTransactionsVersion((version) => version + 1)
     }
   }
 
@@ -86,8 +94,19 @@ export function ClientTransactions() {
             <option value="last-month">Last Month</option>
             <option value="this-year">This Year</option>
           </select>
-          <Button variant="secondary" size="sm">
-            <Icon name="download" className="size-4" /> Export
+          <select
+            aria-label="Filter by category"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none"
+          >
+            <option value="all">All categories</option>
+            {categories.filter((category) => category.userId === user?.id).map((category) => (
+              <option key={category.id} value={category.name}>{category.name}</option>
+            ))}
+          </select>
+          <Button variant="secondary" size="sm" disabled title="Export is unavailable in this demo">
+            <Icon name="download" className="size-4" /> Export unavailable
           </Button>
         </div>
       </div>
@@ -108,12 +127,11 @@ export function ClientTransactions() {
               {paginated.items.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-sm text-slate-500">
-                    No transactions found.
+                    No transactions found. Try adjusting or clearing your filters.
                   </td>
                 </tr>
               ) : (
                 paginated.items.map((t) => {
-                  const category = getCategoryById(t.category) || { name: t.category, color: '#94a3b8' }
                   return (
                     <tr key={t.id} className="hover:bg-slate-50/60">
                       <td className="whitespace-nowrap px-5 py-4 text-xs text-slate-500">
@@ -128,7 +146,7 @@ export function ClientTransactions() {
                       </td>
                       <td className="px-5 py-4 text-slate-500">{t.type}</td>
                       <td className={`px-5 py-4 font-bold ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-800'}`}>
-                        {formatAmount(t.amount)}
+                        {formatAmount(t.type === 'expense' ? -t.amount : t.amount)}
                       </td>
                       <td className="px-5 py-4">
                         <Badge tone={t.status === 'completed' ? 'green' : 'amber'} size="sm">
@@ -166,13 +184,13 @@ export function ClientTransactions() {
 
       <div className="mt-4 flex justify-between text-sm text-slate-500">
         <span>
-          Showing {paginated.startIndex}–{paginated.endIndex} of {paginated.totalItems}
+          Showing {paginated.totalItems === 0 ? 0 : paginated.startIndex}–{paginated.endIndex} of {paginated.totalItems}
         </span>
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}>
+          <Button variant="secondary" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}>
             Previous
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => setCurrentPage((p) => Math.min(p + 1, paginated.totalPages))}>
+          <Button variant="secondary" size="sm" disabled={paginated.totalPages === 0 || currentPage >= paginated.totalPages} onClick={() => setCurrentPage((p) => Math.min(p + 1, paginated.totalPages))}>
             Next
           </Button>
         </div>
