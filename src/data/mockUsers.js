@@ -5,7 +5,6 @@ const mockUsers = [
     lastName: 'Martin',
     email: 'alex.martin@example.com',
     phone: '+33 6 12 34 56 78',
-    password: 'password',
     role: 'client',
     status: 'active',
     currency: 'EUR',
@@ -21,7 +20,6 @@ const mockUsers = [
     lastName: 'Wilson',
     email: 'sarah.w@example.com',
     phone: '+33 6 23 45 67 89',
-    password: 'password',
     role: 'client',
     status: 'active',
     currency: 'EUR',
@@ -37,7 +35,6 @@ const mockUsers = [
     lastName: 'Smith',
     email: 'john.s@example.com',
     phone: '+33 6 34 56 78 90',
-    password: 'password',
     role: 'admin',
     status: 'active',
     currency: 'EUR',
@@ -53,7 +50,6 @@ const mockUsers = [
     lastName: 'Johnson',
     email: 'emma.j@example.com',
     phone: '+33 6 45 67 89 01',
-    password: 'password',
     role: 'client',
     status: 'pending',
     currency: 'EUR',
@@ -69,7 +65,6 @@ const mockUsers = [
     lastName: 'Brown',
     email: 'michael.b@example.com',
     phone: '+33 6 56 78 90 12',
-    password: 'password',
     role: 'client',
     status: 'suspended',
     currency: 'EUR',
@@ -81,19 +76,6 @@ const mockUsers = [
   },
 ]
 
-const demoAccounts = {
-  client: {
-    email: 'client@budgetflow.test',
-    password: 'Client123!',
-    role: 'client',
-  },
-  admin: {
-    email: 'admin@budgetflow.test',
-    password: 'Admin123!',
-    role: 'admin',
-  },
-}
-
 const findUserByEmail = (email) => mockUsers.find((u) => u.email.toLowerCase() === email.toLowerCase())
 
 const getUserById = (id) => mockUsers.find((u) => u.id === id)
@@ -103,4 +85,4 @@ const getInitials = (user) => {
   return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
 }
 
-export { mockUsers, demoAccounts, findUserByEmail, getUserById, getInitials }
+export { mockUsers, findUserByEmail, getUserById, getInitials }

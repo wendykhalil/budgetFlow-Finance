@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { demoAccounts, findUserByEmail } from '@/data/mockUsers'
-import { getRegisteredUsers, saveRegisteredUsers } from '@/data/registeredUsers'
+import { apiRequest } from '@/lib/api'
 
 const AuthContext = createContext(null)
 
@@ -12,91 +11,101 @@ export const useAuth = () => {
   return context
 }
 
-const SESSION_KEY = 'budgetflow_session'
+// Keep sign-in across reloads without persisting user credentials.
+const TOKEN_KEY = 'budgetflow_token'
+const LEGACY_SESSION_KEY = 'budgetflow_session'
+const LEGACY_USERS_KEY = 'budgetflow_users'
 
-const getUserFromStorage = (email, password) => {
-  const users = getRegisteredUsers()
-  return users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password)
+function removeLegacyAuthData() {
+  localStorage.removeItem(LEGACY_SESSION_KEY)
+  localStorage.removeItem(LEGACY_USERS_KEY)
 }
 
-const getDemoUser = (email, password) => {
-  const account = Object.values(demoAccounts).find(
-    (demo) => demo.email === email && demo.password === password,
-  )
-  if (!account) return null
+function getAuthUser(user) {
+  const initials = [user.firstName, user.lastName]
+    .filter((name) => typeof name === 'string' && name.trim())
+    .map((name) => name.trim()[0])
+    .join('')
+    .toUpperCase()
 
-  const profileEmail = account.role === 'admin' ? 'john.s@example.com' : 'alex.martin@example.com'
-  const user = findUserByEmail(profileEmail)
-  return user ? { ...user, role: account.role } : null
+  return {
+    ...user,
+    phone: user.phone || '',
+    country: user.country || '',
+    currency: user.currency || 'EUR',
+    avatar: user.avatar || initials,
+    avatarColor: user.avatarColor || 'blue',
+  }
 }
 
-const getAuthUser = (user) => ({
-  id: user.id,
-  firstName: user.firstName,
-  lastName: user.lastName,
-  email: user.email,
-  phone: user.phone || '',
-  country: user.country || '',
-  currency: user.currency || 'EUR',
-  role: user.role,
-  avatar: user.avatar,
-  avatarColor: user.avatarColor,
-})
+function readAuthResponse(response) {
+  if (!response?.token || !response.user || !response.user.role) {
+    throw new Error('The authentication service returned an invalid response.')
+  }
+  return { token: response.token, user: getAuthUser(response.user) }
+}
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [authError, setAuthError] = useState('')
 
   useEffect(() => {
-    const session = localStorage.getItem(SESSION_KEY)
-    if (session) {
+    let isMounted = true
+    removeLegacyAuthData()
+    const token = localStorage.getItem(TOKEN_KEY)
+
+    async function restoreSession() {
+      if (!token) {
+        setLoading(false)
+        return
+      }
+
       try {
-        const parsed = JSON.parse(session)
-        const storedUser =
-          getUserFromStorage(parsed.email, parsed.password) ||
-          getDemoUser(parsed.email, parsed.password)
-        if (storedUser) setUser(getAuthUser(storedUser))
-      } catch {
-        localStorage.removeItem(SESSION_KEY)
+        const response = await apiRequest('auth/me', { token })
+        if (!response?.user) {
+          throw new Error('The authentication service returned an invalid response.')
+        }
+        if (isMounted) {
+          setUser(getAuthUser(response.user))
+          setAuthError('')
+        }
+      } catch (error) {
+        if (!isMounted) return
+        if (error.status === 401) {
+          localStorage.removeItem(TOKEN_KEY)
+        }
+        setUser(null)
+        setAuthError(error.message || 'Could not restore your session.')
+      } finally {
+        if (isMounted) setLoading(false)
       }
     }
-    setLoading(false)
+
+    restoreSession()
+    return () => {
+      isMounted = false
+    }
   }, [])
 
-  const login = (email, password) => {
-    const storedUser = getUserFromStorage(email, password)
-    if (storedUser) {
-      const userData = {
-        id: storedUser.id,
-        firstName: storedUser.firstName,
-        lastName: storedUser.lastName,
-        email: storedUser.email,
-        phone: storedUser.phone || '',
-        country: storedUser.country || '',
-        currency: storedUser.currency || 'EUR',
-        role: storedUser.role,
-        avatar: storedUser.avatar,
-        avatarColor: storedUser.avatarColor,
-      }
-      setUser(userData)
-      localStorage.setItem(SESSION_KEY, JSON.stringify({ email, password }))
-      return { success: true, user: userData }
-    }
-
-    const demoUser = getDemoUser(email, password)
-    if (demoUser) {
-      const userData = getAuthUser(demoUser)
-      setUser(userData)
-      localStorage.setItem(SESSION_KEY, JSON.stringify({ email, password }))
-      return { success: true, user: userData }
-    }
-
-    return { success: false, error: 'Invalid email or password' }
+  const login = async (email, password) => {
+    const response = await apiRequest('auth/login', {
+      method: 'POST',
+      body: { email, password },
+    })
+    const result = readAuthResponse(response)
+    removeLegacyAuthData()
+    localStorage.setItem(TOKEN_KEY, result.token)
+    setUser(result.user)
+    setAuthError('')
+    return { success: true, user: result.user }
   }
 
   const logout = () => {
     setUser(null)
-    localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem(TOKEN_KEY)
+    removeLegacyAuthData()
+    setAuthError('')
   }
 
   const updateProfile = (profile) => {
@@ -110,36 +119,31 @@ export const AuthProvider = ({ children }) => {
     } : currentUser)
   }
 
-  const register = (formData) => {
-    const users = getRegisteredUsers()
-    const email = formData.email.trim().toLowerCase()
-    if (users.some((u) => u.email.toLowerCase() === email) || findUserByEmail(email)) {
-      return { success: false, error: 'Email already registered' }
-    }
-    const newUser = {
-      id: `usr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      firstName: formData.firstName.trim(),
-      lastName: formData.lastName.trim(),
-      email,
-      phone: formData.phone || '',
-      password: formData.password,
-      role: 'client',
-      status: 'active',
-      currency: formData.currency || 'EUR',
-      country: formData.country || 'France',
-      avatar: `${formData.firstName[0]}${formData.lastName[0]}`.toUpperCase(),
-      avatarColor: 'blue',
-      joinedAt: new Date().toISOString(),
-      transactionsCount: 0,
-    }
-    users.push(newUser)
-    saveRegisteredUsers(users)
-    return { success: true, user: newUser }
+  const register = async (formData) => {
+    const response = await apiRequest('auth/register', {
+      method: 'POST',
+      body: {
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        email: formData.email.trim().toLowerCase(),
+        phone: formData.phone || '',
+        password: formData.password,
+        currency: formData.currency || 'EUR',
+        country: formData.country || 'France',
+      },
+    })
+    const result = readAuthResponse(response)
+    removeLegacyAuthData()
+    localStorage.setItem(TOKEN_KEY, result.token)
+    setUser(result.user)
+    setAuthError('')
+    return { success: true, user: result.user }
   }
 
   const value = {
     user,
     loading,
+    authError,
     login,
     logout,
     updateProfile,

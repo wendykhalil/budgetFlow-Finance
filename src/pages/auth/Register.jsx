@@ -26,8 +26,9 @@ export function Register() {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    if (loading) return
     setLoading(true)
     setError('')
 
@@ -43,22 +44,23 @@ export function Register() {
       return
     }
 
-    const result = register({
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      email: formData.email,
-      phone: formData.phone,
-      password: formData.password,
-      currency: formData.currency,
-      country: formData.country,
-    })
-
-    if (result.success) {
-      navigate('/login')
-    } else {
-      setError(result.error || 'Registration failed')
+    try {
+      const result = await register({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+        currency: formData.currency,
+        country: formData.country,
+      })
+      const path = result.user.role === 'admin' ? '/admin/dashboard' : '/client/dashboard'
+      navigate(path, { replace: true })
+    } catch (registrationError) {
+      setError(registrationError.message || 'Registration failed.')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (

@@ -1,58 +1,40 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
-import { demoAccounts } from '@/data/mockUsers'
 import Logo from '@/components/layout/Logo'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Input from '@/components/ui/Input'
-import Icon from '@/components/ui/Icon'
 
 export function Login() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { login } = useAuth()
+  const { login, authError } = useAuth()
 
-  const [email, setEmail] = useState('client@budgetflow.test')
-  const [password, setPassword] = useState('Client123!')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const redirectPath = location.state?.from || '/client/dashboard'
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    if (loading) return
     setLoading(true)
     setError('')
 
-    const result = login(email, password)
-
-    if (result.success) {
-      const session = localStorage.getItem('budgetflow_session')
-      let path = redirectPath
-      if (session) {
-        try {
-          const { email: sessionEmail } = JSON.parse(session)
-          if (sessionEmail === demoAccounts.admin.email) {
-            path = '/admin/dashboard'
-          }
-        } catch {
-          path = '/client/dashboard'
-        }
-      } else {
-        path = result.user.role === 'admin' ? '/admin/dashboard' : '/client/dashboard'
-      }
+    try {
+      const result = await login(email, password)
+      const isAdmin = result.user.role === 'admin'
+      const rolePrefix = isAdmin ? '/admin/' : '/client/'
+      const roleHome = isAdmin ? '/admin/dashboard' : '/client/dashboard'
+      const requestedPath = location.state?.from
+      const path = requestedPath?.startsWith(rolePrefix) ? requestedPath : roleHome
       navigate(path, { replace: true })
-    } else {
-      setError(result.error || 'Invalid email or password')
+    } catch (loginError) {
+      setError(loginError.message || 'Unable to sign in.')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
-  }
-
-  const handleDemoLogin = (demoType) => {
-    const demo = demoAccounts[demoType]
-    setEmail(demo.email)
-    setPassword(demo.password)
   }
 
   return (
@@ -114,7 +96,7 @@ export function Login() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              error={error}
+              error={error || authError}
             />
             <Input
               label="Password"
@@ -145,44 +127,10 @@ export function Login() {
           </form>
 
           <div className="my-7 flex items-center gap-3 text-xs text-slate-400 before:h-px before:flex-1 before:bg-slate-200 after:h-px after:flex-1 after:bg-slate-200">
-            DEMO ACCOUNTS
+            BACKEND ACCOUNTS
           </div>
-
-          <div className="space-y-3">
-            <button
-              onClick={() => handleDemoLogin('client')}
-              className="flex w-full items-center gap-4 rounded-xl border border-slate-200 p-4 text-left hover:border-emerald-300 hover:bg-emerald-50/30"
-            >
-              <span className="grid size-10 place-items-center rounded-full bg-emerald-100 font-bold text-emerald-700">
-                AM
-              </span>
-              <span className="flex-1">
-                <span className="block text-sm font-bold text-slate-800">
-                  Continue as Client
-                </span>
-                <span className="text-xs text-slate-500">
-                  client@budgetflow.test · Client123!
-                </span>
-              </span>
-              <Icon name="arrow" className="size-4 text-slate-400" />
-            </button>
-            <button
-              onClick={() => handleDemoLogin('admin')}
-              className="flex w-full items-center gap-4 rounded-xl border border-slate-200 p-4 text-left hover:border-indigo-300 hover:bg-indigo-50/30"
-            >
-              <span className="grid size-10 place-items-center rounded-full bg-indigo-100 font-bold text-indigo-700">
-                JD
-              </span>
-              <span className="flex-1">
-                <span className="block text-sm font-bold text-slate-800">
-                  Continue as Admin
-                </span>
-                <span className="text-xs text-slate-500">
-                  admin@budgetflow.test · Admin123!
-                </span>
-              </span>
-              <Icon name="arrow" className="size-4 text-slate-400" />
-            </button>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+            Sign in with an account registered with BudgetFlow. Admin accounts must be provisioned separately.
           </div>
 
           <p className="mt-7 text-center text-sm text-slate-500">

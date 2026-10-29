@@ -47,7 +47,9 @@ export async function apiRequest(endpoint, options = {}) {
       typeof responseData?.message === 'string'
         ? responseData.message
         : `Request failed (${response.status}${response.statusText ? ` ${response.statusText}` : ''}).`
-    throw new Error(message)
+    const error = new Error(message)
+    error.status = response.status
+    throw error
   }
 
   return responseData
