@@ -29,7 +29,7 @@ test('API health, readiness, errors, and CORS', async () => {
       body: '{',
     });
     assert.equal(invalidJsonResponse.status, 400);
-    assert.equal((await invalidJsonResponse.json()).message, 'Invalid request.');
+    assert.equal((await invalidJsonResponse.json()).message, 'Invalid request JSON.');
 
     const allowedOriginResponse = await fetch(`${baseUrl}/api/health`, {
       headers: { Origin: 'http://localhost:8443' },
