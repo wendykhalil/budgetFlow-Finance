@@ -123,6 +123,69 @@ describe('BudgetFlow API integration', () => {
     assert.equal((await failure.json()).message, 'Invalid email or password.');
   });
 
+  it('rejects login for pending accounts', async () => {
+    const pendingEmail = `pending-${process.pid}-${Date.now()}@example.test`;
+    await User.create({
+      firstName: 'Pat',
+      lastName: 'Pending',
+      email: pendingEmail,
+      password: 'Client123!',
+      status: 'pending',
+    });
+
+    const response = await request('/api/auth/login', {
+      method: 'POST',
+      body: { email: pendingEmail, password: 'Client123!' },
+    });
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).message, 'Invalid email or password.');
+  });
+
+  it('rejects login for suspended accounts', async () => {
+    const suspendedEmail = `suspended-${process.pid}-${Date.now()}@example.test`;
+    await User.create({
+      firstName: 'Sam',
+      lastName: 'Suspended',
+      email: suspendedEmail,
+      password: 'Client123!',
+      status: 'suspended',
+    });
+
+    const response = await request('/api/auth/login', {
+      method: 'POST',
+      body: { email: suspendedEmail, password: 'Client123!' },
+    });
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).message, 'Invalid email or password.');
+  });
+
+  it('rejects a previously issued token after the account is suspended', async () => {
+    const activeEmail = `active-token-${process.pid}-${Date.now()}@example.test`;
+    const activeUser = await User.create({
+      firstName: 'Avery',
+      lastName: 'Active',
+      email: activeEmail,
+      password: 'Client123!',
+    });
+
+    const login = await request('/api/auth/login', {
+      method: 'POST',
+      body: { email: activeEmail, password: 'Client123!' },
+    });
+    assert.equal(login.status, 200);
+    const activeToken = (await login.json()).token;
+
+    await User.findByIdAndUpdate(activeUser.id, { status: 'suspended' });
+
+    const currentUser = await request('/api/auth/me', { accessToken: activeToken });
+    assert.equal(currentUser.status, 401);
+    assert.equal((await currentUser.json()).message, 'Invalid or expired token.');
+
+    const transactions = await request('/api/transactions', { accessToken: activeToken });
+    assert.equal(transactions.status, 401);
+    assert.equal((await transactions.json()).message, 'Invalid or expired token.');
+  });
+
   it('protects the current-user and transaction routes', async () => {
     const currentUser = await request('/api/auth/me', { accessToken: token });
     assert.equal(currentUser.status, 200);
