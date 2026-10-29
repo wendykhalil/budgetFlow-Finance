@@ -69,7 +69,11 @@ async function login(req, res, next) {
     }
 
     const user = await User.findOne({ email: email.trim().toLowerCase() }).select('+password');
-    if (!user || !(await bcrypt.compare(password, user.password))) {
+    if (
+      !user ||
+      !(await bcrypt.compare(password, user.password)) ||
+      user.status !== 'active'
+    ) {
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 

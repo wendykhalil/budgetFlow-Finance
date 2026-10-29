@@ -22,7 +22,7 @@ async function requireAuth(req, res, next) {
 
   try {
     const user = await User.findById(payload.sub);
-    if (!user) {
+    if (!user || user.status !== 'active') {
       return res.status(401).json({ message: 'Invalid or expired token.' });
     }
 
