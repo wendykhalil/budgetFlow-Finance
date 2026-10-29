@@ -1,9 +1,11 @@
 const express = require('express');
-const healthRoutes = require('./routes/healthRoutes');
 
 const app = express();
 
 app.use(express.json());
-app.use('/api', healthRoutes);
+
+app.get('/api/health', (req, res) => {
+  res.json({ message: 'API is working' });
+});
 
 module.exports = app;
