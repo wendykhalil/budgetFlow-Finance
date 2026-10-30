@@ -91,11 +91,19 @@ describe('BudgetFlow API integration', () => {
     assert.notEqual(storedUser.password, 'Client123!');
     assert.equal(await require('bcryptjs').compare('Client123!', storedUser.password), true);
 
-    const invalid = await request('/api/auth/register', {
-      method: 'POST',
-      body: { firstName: '', lastName: 'Martin', email: 'not-an-email', password: 'short' },
-    });
-    assert.equal(invalid.status, 400);
+    const invalidRegistrations = [
+      { lastName: 'Martin', email, password: 'Client123!' },
+      { firstName: 'Alex', email, password: 'Client123!' },
+      { firstName: 'Alex', lastName: 'Martin', password: 'Client123!' },
+      { firstName: 'Alex', lastName: 'Martin', email: 'not-an-email', password: 'Client123!' },
+      { firstName: 'Alex', lastName: 'Martin', email },
+      { firstName: 'Alex', lastName: 'Martin', email, password: 'short' },
+      { firstName: 'Alex', lastName: 'Martin', email, password: 'a'.repeat(73) },
+    ];
+    for (const body of invalidRegistrations) {
+      const invalid = await request('/api/auth/register', { method: 'POST', body });
+      assert.equal(invalid.status, 400);
+    }
 
     const duplicate = await request('/api/auth/register', {
       method: 'POST',
@@ -114,6 +122,10 @@ describe('BudgetFlow API integration', () => {
     token = result.token;
     assert.equal(result.user.id, userId);
     assert.equal(Object.hasOwn(result.user, 'password'), false);
+
+    const currentUser = await request('/api/auth/me', { accessToken: token });
+    assert.equal(currentUser.status, 200);
+    assert.equal(Object.hasOwn((await currentUser.json()).user, 'password'), false);
 
     const failure = await request('/api/auth/login', {
       method: 'POST',
@@ -191,11 +203,38 @@ describe('BudgetFlow API integration', () => {
     assert.equal(currentUser.status, 200);
     assert.equal((await currentUser.json()).user.id, userId);
 
-    const noToken = await request('/api/transactions');
-    assert.equal(noToken.status, 401);
+    for (const path of ['/api/auth/me', '/api/transactions']) {
+      const noToken = await request(path);
+      assert.equal(noToken.status, 401);
 
-    const badToken = await request('/api/transactions', { accessToken: 'not-a-token' });
-    assert.equal(badToken.status, 401);
+      const malformedHeader = await request(path, { headers: { authorization: 'Bearer' } });
+      assert.equal(malformedHeader.status, 401);
+
+      const invalidToken = await request(path, { accessToken: 'not-a-token' });
+      assert.equal(invalidToken.status, 401);
+    }
+  });
+
+  it('rejects an active-looking token after its user has been deleted', async () => {
+    const deletedUser = await User.create({
+      firstName: 'Delete',
+      lastName: 'Me',
+      email: `deleted-${process.pid}-${Date.now()}@example.test`,
+      password: 'Client123!',
+    });
+    const login = await request('/api/auth/login', {
+      method: 'POST',
+      body: { email: deletedUser.email, password: 'Client123!' },
+    });
+    assert.equal(login.status, 200);
+    const deletedUserToken = (await login.json()).token;
+
+    await User.findByIdAndDelete(deletedUser.id);
+
+    const currentUser = await request('/api/auth/me', { accessToken: deletedUserToken });
+    assert.equal(currentUser.status, 401);
+    const transactions = await request('/api/transactions', { accessToken: deletedUserToken });
+    assert.equal(transactions.status, 401);
   });
 
   it('creates, lists, reads, updates, and deletes the signed-in user transaction', async () => {
@@ -251,43 +290,42 @@ describe('BudgetFlow API integration', () => {
   });
 
   it('rejects invalid transaction input and unknown routes', async () => {
-    const invalidAmount = await request('/api/transactions', {
-      method: 'POST',
-      accessToken: token,
-      body: {
-        date: '2026-10-24',
-        description: 'Bad amount',
-        category: 'Food',
-        type: 'expense',
-        amount: 0,
-      },
-    });
-    assert.equal(invalidAmount.status, 400);
+    const validInput = {
+      date: '2026-10-24',
+      description: 'Valid transaction',
+      category: 'Food',
+      type: 'expense',
+      amount: 1,
+      status: 'completed',
+    };
 
-    const missingDescription = await request('/api/transactions', {
-      method: 'POST',
-      accessToken: token,
-      body: {
-        date: '2026-10-24',
-        category: 'Food',
-        type: 'expense',
-        amount: 1,
-      },
-    });
-    assert.equal(missingDescription.status, 400);
+    for (const field of ['date', 'description', 'category', 'type', 'amount']) {
+      const missingFieldInput = { ...validInput };
+      delete missingFieldInput[field];
+      const missingField = await request('/api/transactions', {
+        method: 'POST',
+        accessToken: token,
+        body: missingFieldInput,
+      });
+      assert.equal(missingField.status, 400, `${field} should be required`);
+    }
 
-    const invalidDate = await request('/api/transactions', {
-      method: 'POST',
-      accessToken: token,
-      body: {
-        date: '2026-02-30',
-        description: 'Bad date',
-        category: 'Food',
-        type: 'expense',
-        amount: 1,
-      },
-    });
-    assert.equal(invalidDate.status, 400);
+    for (const [field, value] of [
+      ['amount', 0],
+      ['amount', -1],
+      ['type', 'transfer'],
+      ['date', '2026-02-30'],
+      ['status', 'cancelled'],
+      ['description', '  '],
+      ['category', '  '],
+    ]) {
+      const invalidInput = await request('/api/transactions', {
+        method: 'POST',
+        accessToken: token,
+        body: { ...validInput, [field]: value },
+      });
+      assert.equal(invalidInput.status, 400, `${field}=${value} should be rejected`);
+    }
 
     const invalidUpdate = await request('/api/transactions/000000000000000000000001', {
       method: 'PATCH',
@@ -360,5 +398,6 @@ describe('BudgetFlow API integration', () => {
       accessToken: token,
     });
     assert.equal(ownerRead.status, 200);
+    assert.equal((await ownerRead.json()).transaction.amount, 20);
   });
 });

@@ -1,31 +1,84 @@
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
 import PageTitle from '@/components/layout/PageTitle'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Card from '@/components/ui/Card'
 import Icon from '@/components/ui/Icon'
-import { transactions, getTransactionById } from '@/data/mockTransactions'
+import { ConfirmModal } from '@/components/ui/Modal'
+import { useToast } from '@/components/ui/Toast'
+import { apiRequest } from '@/lib/api'
 
 export function TransactionDetails() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const { user } = useAuth()
-  const transaction = getTransactionById(id)
-  const canView = transaction?.userId === user?.id
+  const { showToast, ToastComponent } = useToast()
+  const [transaction, setTransaction] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
-  const handleDelete = () => {
-    if (!canView) return
-    const idx = transactions.findIndex((t) => t.id === id)
-    if (idx !== -1) transactions.splice(idx, 1)
-    navigate('/client/transactions')
+  async function loadTransaction() {
+    setLoading(true)
+    setError('')
+    try {
+      const response = await apiRequest(`transactions/${id}`, {
+        token: localStorage.getItem('budgetflow_token'),
+      })
+      if (!response?.transaction?.id) {
+        throw new Error('The transactions service returned an invalid response.')
+      }
+      setTransaction(response.transaction)
+    } catch (requestError) {
+      setTransaction(null)
+      setError(requestError.message || 'Could not load this transaction.')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  if (!canView) {
+  useEffect(() => {
+    loadTransaction()
+  }, [id])
+
+  async function handleDelete() {
+    if (!transaction) return
+    setDeleting(true)
+    try {
+      await apiRequest(`transactions/${transaction.id}`, {
+        method: 'DELETE',
+        token: localStorage.getItem('budgetflow_token'),
+      })
+      navigate('/client/transactions', {
+        state: { successMessage: 'Transaction deleted.' },
+      })
+    } catch (requestError) {
+      showToast(requestError.message || 'Could not delete the transaction.', 'error')
+    } finally {
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
+  }
+
+  if (loading) {
+    return <Card><p role="status" className="py-8 text-center text-sm text-slate-500">Loading transaction...</p></Card>
+  }
+
+  if (error || !transaction) {
     return (
       <Card>
-        <p className="font-semibold text-slate-900">Transaction not found.</p>
-        <Button className="mt-4" onClick={() => navigate('/client/transactions')}>Back to transactions</Button>
+        <div className="py-8 text-center">
+          <p role="alert" className="text-sm text-rose-600">
+            {error || 'Transaction not found.'}
+          </p>
+          <div className="mt-4 flex justify-center gap-3">
+            <Button variant="secondary" onClick={() => navigate('/client/transactions')}>
+              Back to transactions
+            </Button>
+            <Button onClick={loadTransaction}>Retry</Button>
+          </div>
+        </div>
       </Card>
     )
   }
@@ -40,7 +93,7 @@ export function TransactionDetails() {
             <Button variant="secondary" onClick={() => navigate('/client/transactions')}>
               <Icon name="arrow-left" className="size-4" /> Back
             </Button>
-            <Button variant="outline" onClick={() => navigate(`/client/transactions/${id}/edit`)}>
+            <Button variant="outline" onClick={() => navigate(`/client/transactions/${transaction.id}/edit`)}>
               <Icon name="edit" className="size-4" /> Edit
             </Button>
           </div>
@@ -56,7 +109,7 @@ export function TransactionDetails() {
           <div>
             <div className="text-sm text-slate-500">Amount</div>
             <div className={`mt-1 text-2xl font-bold ${transaction.type === 'income' ? 'text-emerald-600' : 'text-slate-800'}`}>
-              {transaction.amount >= 0 ? `+€${transaction.amount.toFixed(2)}` : `-€${Math.abs(transaction.amount).toFixed(2)}`}
+              {transaction.type === 'income' ? '+' : '-'}€{Number(transaction.amount).toFixed(2)}
             </div>
           </div>
           <div>
@@ -73,17 +126,17 @@ export function TransactionDetails() {
           </div>
           <div>
             <div className="text-sm text-slate-500">Date</div>
-            <div className="mt-1 font-semibold">{new Date(transaction.date).toLocaleDateString('en-GB')}</div>
+            <div className="mt-1 font-semibold">{new Date(`${transaction.date}T00:00:00`).toLocaleDateString('en-GB')}</div>
           </div>
           <div>
             <div className="text-sm text-slate-500">Payment method</div>
-            <div className="mt-1 font-semibold">{transaction.paymentMethod}</div>
+            <div className="mt-1 font-semibold">{transaction.paymentMethod || 'Not specified'}</div>
           </div>
           <div>
             <div className="text-sm text-slate-500">Status</div>
             <div className="mt-1">
               <Badge tone={transaction.status === 'completed' ? 'green' : 'amber'}>
-                {transaction.status}
+                {transaction.status || 'completed'}
               </Badge>
             </div>
           </div>
@@ -97,14 +150,25 @@ export function TransactionDetails() {
           <Button variant="secondary" onClick={() => navigate('/client/transactions')}>
             Back to transactions
           </Button>
-          <button
-            onClick={handleDelete}
-            className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700"
-          >
-            Delete transaction
-          </button>
+          <Button variant="danger" onClick={() => setConfirmDelete(true)} disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete transaction'}
+          </Button>
         </div>
       </Card>
+
+      <ConfirmModal
+        isOpen={confirmDelete}
+        onClose={() => {
+          if (!deleting) setConfirmDelete(false)
+        }}
+        onConfirm={handleDelete}
+        title="Delete transaction"
+        message={`Delete "${transaction.description}"? This cannot be undone.`}
+        confirmText={deleting ? 'Deleting...' : 'Delete'}
+        danger
+        confirmDisabled={deleting}
+      />
+      {ToastComponent}
     </>
   )
 }
