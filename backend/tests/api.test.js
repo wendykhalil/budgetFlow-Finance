@@ -1,12 +1,17 @@
 const assert = require('node:assert/strict');
 const { after, before, describe, it } = require('node:test');
 const mongoose = require('mongoose');
+const jwt = require('jsonwebtoken');
+const { createServer } = require('node:http');
+const { io: createSocketClient } = require('socket.io-client');
 
 process.env.FRONTEND_ORIGINS = 'http://localhost:8443';
 process.env.JWT_SECRET = 'test-secret-with-at-least-32-characters';
 
 const app = require('../src/app');
+const Transaction = require('../src/models/Transaction');
 const User = require('../src/models/User');
+const { attachSocketServer } = require('../src/socket');
 
 const databaseName = `budgetflow_backend_test_${process.pid}_${Date.now()}`;
 const databaseUri = `mongodb://127.0.0.1:27017/${databaseName}`;
@@ -17,6 +22,7 @@ let token;
 let userId;
 let transactionId;
 let otherToken;
+let socketServer;
 
 async function request(path, { method = 'GET', accessToken, body, rawBody, headers = {} } = {}) {
   const requestHeaders = { ...headers };
@@ -34,16 +40,61 @@ async function request(path, { method = 'GET', accessToken, body, rawBody, heade
   });
 }
 
+function connectSocket(auth = {}) {
+  const socket = createSocketClient(baseUrl, {
+    auth,
+    autoConnect: false,
+    reconnection: false,
+    timeout: 1000,
+  });
+  return new Promise((resolve, reject) => {
+    socket.once('connect', () => resolve(socket));
+    socket.once('connect_error', (error) => {
+      socket.disconnect();
+      reject(error);
+    });
+    socket.connect();
+  });
+}
+
+function nextSocketEvent(socket, event) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timed out waiting for ${event}.`)), 2000);
+    socket.once(event, (payload) => {
+      clearTimeout(timer);
+      resolve(payload);
+    });
+  });
+}
+
+async function socketEventNotReceived(socket, event, duration = 100) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      socket.off(event, onEvent);
+      resolve(true);
+    }, duration);
+    function onEvent() {
+      clearTimeout(timer);
+      resolve(false);
+    }
+    socket.once(event, onEvent);
+  });
+}
+
 describe('BudgetFlow API integration', () => {
   before(async () => {
     await mongoose.connect(databaseUri);
-    server = app.listen(0, '127.0.0.1');
+    server = createServer(app);
+    socketServer = attachSocketServer(server, app);
+    server.listen(0, '127.0.0.1');
     await new Promise((resolve) => server.once('listening', resolve));
     baseUrl = `http://127.0.0.1:${server.address().port}`;
   });
 
   after(async () => {
-    if (server) {
+    if (socketServer) {
+      await new Promise((resolve) => socketServer.close(resolve));
+    } else if (server) {
       await new Promise((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
       });
@@ -399,5 +450,120 @@ describe('BudgetFlow API integration', () => {
     });
     assert.equal(ownerRead.status, 200);
     assert.equal((await ownerRead.json()).transaction.amount, 20);
+  });
+
+  it('authenticates sockets and emits transaction events only to the owner', async () => {
+    await assert.rejects(connectSocket(), (error) => error.data?.code === 'AUTH_REQUIRED');
+    await assert.rejects(
+      connectSocket({ token: 'not-a-token' }),
+      (error) => error.data?.code === 'AUTH_REQUIRED',
+    );
+
+    const inactiveUser = await User.create({
+      firstName: 'Inactive',
+      lastName: 'Client',
+      email: `inactive-socket-${process.pid}-${Date.now()}@example.test`,
+      password: 'Client123!',
+      status: 'suspended',
+    });
+    const inactiveToken = jwt.sign(
+      { sub: inactiveUser.id },
+      process.env.JWT_SECRET,
+      { algorithm: 'HS256', expiresIn: '1h' },
+    );
+    await assert.rejects(
+      connectSocket({ token: inactiveToken }),
+      (error) => error.data?.code === 'AUTH_REQUIRED',
+    );
+
+    const deletedUser = await User.create({
+      firstName: 'Deleted',
+      lastName: 'Client',
+      email: `deleted-socket-${process.pid}-${Date.now()}@example.test`,
+      password: 'Client123!',
+    });
+    const deletedToken = jwt.sign(
+      { sub: deletedUser.id },
+      process.env.JWT_SECRET,
+      { algorithm: 'HS256', expiresIn: '1h' },
+    );
+    await User.findByIdAndDelete(deletedUser.id);
+    await assert.rejects(
+      connectSocket({ token: deletedToken }),
+      (error) => error.data?.code === 'AUTH_REQUIRED',
+    );
+
+    const expiredToken = jwt.sign(
+      { sub: userId },
+      process.env.JWT_SECRET,
+      { algorithm: 'HS256', expiresIn: -1 },
+    );
+    await assert.rejects(
+      connectSocket({ token: expiredToken }),
+      (error) => error.data?.code === 'AUTH_REQUIRED',
+    );
+
+    const ownerSocket = await connectSocket({ token });
+    const otherSocket = await connectSocket({ token: otherToken });
+    try {
+      const createdEvent = nextSocketEvent(ownerSocket, 'transaction:created');
+      const otherCreateEvent = socketEventNotReceived(otherSocket, 'transaction:created');
+      const created = await request('/api/transactions', {
+        method: 'POST',
+        accessToken: token,
+        body: {
+          date: '2026-10-28',
+          description: 'Socket groceries',
+          category: 'Food',
+          type: 'expense',
+          amount: 25,
+        },
+      });
+      assert.equal(created.status, 201);
+      const createdId = (await created.json()).transaction.id;
+      assert.equal((await createdEvent).transaction.id, createdId);
+      assert.equal(await otherCreateEvent, true);
+
+      const updatedEvent = nextSocketEvent(ownerSocket, 'transaction:updated');
+      const otherUpdateEvent = socketEventNotReceived(otherSocket, 'transaction:updated');
+      const updated = await request(`/api/transactions/${createdId}`, {
+        method: 'PATCH',
+        accessToken: token,
+        body: { amount: 40 },
+      });
+      assert.equal(updated.status, 200);
+      assert.equal((await updatedEvent).transaction.amount, 40);
+      assert.equal(await otherUpdateEvent, true);
+
+      const originalUpdate = Transaction.findOneAndUpdate;
+      Transaction.findOneAndUpdate = async () => {
+        throw new Error('Simulated database operation failure.');
+      };
+      try {
+        const failedEvent = socketEventNotReceived(ownerSocket, 'transaction:updated');
+        const failedUpdate = await request(`/api/transactions/${createdId}`, {
+          method: 'PATCH',
+          accessToken: token,
+          body: { amount: 50 },
+        });
+        assert.equal(failedUpdate.status, 500);
+        assert.equal(await failedEvent, true);
+      } finally {
+        Transaction.findOneAndUpdate = originalUpdate;
+      }
+
+      const deletedEvent = nextSocketEvent(ownerSocket, 'transaction:deleted');
+      const otherDeleteEvent = socketEventNotReceived(otherSocket, 'transaction:deleted');
+      const deleted = await request(`/api/transactions/${createdId}`, {
+        method: 'DELETE',
+        accessToken: token,
+      });
+      assert.equal(deleted.status, 200);
+      assert.deepEqual(await deletedEvent, { id: createdId });
+      assert.equal(await otherDeleteEvent, true);
+    } finally {
+      ownerSocket.disconnect();
+      otherSocket.disconnect();
+    }
   });
 });

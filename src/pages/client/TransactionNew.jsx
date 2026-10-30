@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import PageTitle from '@/components/layout/PageTitle'
 import Button from '@/components/ui/Button'
@@ -8,10 +8,12 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { apiRequest } from '@/lib/api'
 import { categories } from '@/data/mockCategories'
+import { useTransactions } from '@/contexts/TransactionContext'
 
 export function TransactionNew() {
   const navigate = useNavigate()
   const { id } = useParams()
+  const { upsertTransaction } = useTransactions()
   const isEditing = Boolean(id)
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
@@ -23,6 +25,7 @@ export function TransactionNew() {
   const [loadingTransaction, setLoadingTransaction] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const submitLockRef = useRef(false)
 
   const categoryOptions = categories
     .filter((item) => item.type === type)
@@ -69,6 +72,7 @@ export function TransactionNew() {
 
   async function handleSubmit(event) {
     event.preventDefault()
+    if (submitLockRef.current) return
     const parsedAmount = Number(amount)
     const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(date)
       ? new Date(`${date}T00:00:00.000Z`)
@@ -89,6 +93,7 @@ export function TransactionNew() {
     }
 
     setError('')
+    submitLockRef.current = true
     setSubmitting(true)
     try {
       const body = {
@@ -113,6 +118,7 @@ export function TransactionNew() {
       if (!response?.transaction?.id) {
         throw new Error('The transactions service returned an invalid response.')
       }
+      upsertTransaction(response.transaction)
 
       navigate('/client/transactions', {
         state: { successMessage: isEditing ? 'Transaction updated.' : 'Transaction created.' },
@@ -120,6 +126,7 @@ export function TransactionNew() {
     } catch (requestError) {
       setError(requestError.message || `Could not ${isEditing ? 'update' : 'create'} the transaction.`)
     } finally {
+      submitLockRef.current = false
       setSubmitting(false)
     }
   }

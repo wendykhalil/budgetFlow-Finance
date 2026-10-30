@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import PageTitle from '@/components/layout/PageTitle'
 import Button from '@/components/ui/Button'
@@ -8,39 +8,22 @@ import Icon from '@/components/ui/Icon'
 import { ConfirmModal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { apiRequest } from '@/lib/api'
+import { useTransactions } from '@/contexts/TransactionContext'
 
 export function TransactionDetails() {
   const navigate = useNavigate()
   const { id } = useParams()
   const { showToast, ToastComponent } = useToast()
-  const [transaction, setTransaction] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const {
+    transactions,
+    loading,
+    error,
+    refreshTransactions,
+    removeTransaction,
+  } = useTransactions()
+  const transaction = transactions.find((item) => item.id === id) || null
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
-
-  async function loadTransaction() {
-    setLoading(true)
-    setError('')
-    try {
-      const response = await apiRequest(`transactions/${id}`, {
-        token: localStorage.getItem('budgetflow_token'),
-      })
-      if (!response?.transaction?.id) {
-        throw new Error('The transactions service returned an invalid response.')
-      }
-      setTransaction(response.transaction)
-    } catch (requestError) {
-      setTransaction(null)
-      setError(requestError.message || 'Could not load this transaction.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadTransaction()
-  }, [id])
 
   async function handleDelete() {
     if (!transaction) return
@@ -50,6 +33,7 @@ export function TransactionDetails() {
         method: 'DELETE',
         token: localStorage.getItem('budgetflow_token'),
       })
+      removeTransaction(transaction.id)
       navigate('/client/transactions', {
         state: { successMessage: 'Transaction deleted.' },
       })
@@ -65,19 +49,34 @@ export function TransactionDetails() {
     return <Card><p role="status" className="py-8 text-center text-sm text-slate-500">Loading transaction...</p></Card>
   }
 
-  if (error || !transaction) {
+  if (error && !transaction) {
     return (
       <Card>
         <div className="py-8 text-center">
           <p role="alert" className="text-sm text-rose-600">
-            {error || 'Transaction not found.'}
+            {error}
           </p>
           <div className="mt-4 flex justify-center gap-3">
             <Button variant="secondary" onClick={() => navigate('/client/transactions')}>
               Back to transactions
             </Button>
-            <Button onClick={loadTransaction}>Retry</Button>
+            <Button onClick={refreshTransactions} disabled={loading}>Retry</Button>
           </div>
+        </div>
+      </Card>
+    )
+  }
+
+  if (!transaction) {
+    return (
+      <Card>
+        <div className="py-8 text-center">
+          <p role={loading ? 'status' : 'alert'} className="text-sm text-slate-500">
+            {loading ? 'Loading transaction...' : 'Transaction not found.'}
+          </p>
+          {!loading && (
+            <Button className="mt-4" onClick={refreshTransactions}>Retry</Button>
+          )}
         </div>
       </Card>
     )

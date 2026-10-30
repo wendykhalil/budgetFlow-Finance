@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import Sidebar from '@/components/layout/Sidebar'
 import Header from '@/components/layout/Header'
+import TransactionProvider from '@/contexts/TransactionContext'
 
 export function ClientLayout() {
   const { user, loading } = useAuth()
@@ -54,9 +55,11 @@ export function ClientLayout() {
           onToggleMobileMenu={() => setMobileMenuOpen((open) => !open)}
           menuButtonRef={menuButtonRef}
         />
-        <main className="p-4 md:p-7 lg:p-8">
-          <Outlet />
-        </main>
+        <TransactionProvider>
+          <main className="p-4 md:p-7 lg:p-8">
+            <Outlet />
+          </main>
+        </TransactionProvider>
       </div>
     </div>
   )

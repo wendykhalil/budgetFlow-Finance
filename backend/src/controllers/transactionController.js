@@ -12,6 +12,16 @@ const transactionFields = [
   'note',
 ];
 
+function emitTransactionEvent(req, event, transaction) {
+  const io = req.app.get('io');
+  if (!io) return;
+  const eventTransaction = transaction.toJSON();
+  delete eventTransaction.userId;
+  io.to(`user:${transaction.userId.toString()}`).emit(event, {
+    transaction: eventTransaction,
+  });
+}
+
 function isValidDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;
@@ -97,6 +107,7 @@ async function createTransaction(req, res, next) {
       ...updates,
       userId: req.user.id,
     });
+    emitTransactionEvent(req, 'transaction:created', transaction);
     return res.status(201).json({ transaction });
   } catch (error) {
     return next(error);
@@ -154,6 +165,7 @@ async function updateTransaction(req, res, next) {
       return res.status(404).json({ message: 'Transaction not found.' });
     }
 
+    emitTransactionEvent(req, 'transaction:updated', transaction);
     return res.status(200).json({ transaction });
   } catch (error) {
     return next(error);
@@ -174,6 +186,12 @@ async function deleteTransaction(req, res, next) {
       return res.status(404).json({ message: 'Transaction not found.' });
     }
 
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${transaction.userId.toString()}`).emit('transaction:deleted', {
+        id: transaction.id,
+      });
+    }
     return res.status(200).json({ message: 'Transaction deleted.' });
   } catch (error) {
     return next(error);

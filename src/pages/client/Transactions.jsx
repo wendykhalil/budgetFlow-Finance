@@ -9,15 +9,20 @@ import SearchInput from '@/components/ui/SearchInput'
 import { ConfirmModal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { apiRequest } from '@/lib/api'
+import { useTransactions } from '@/contexts/TransactionContext'
 import { filterTransactions, formatCurrency, paginate } from '@/utils/formatters'
 
 export function ClientTransactions() {
   const navigate = useNavigate()
   const location = useLocation()
   const { showToast, ToastComponent } = useToast()
-  const [transactions, setTransactions] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const {
+    transactions,
+    loading,
+    error,
+    refreshTransactions,
+    removeTransaction,
+  } = useTransactions()
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -26,28 +31,6 @@ export function ClientTransactions() {
   const [transactionToDelete, setTransactionToDelete] = useState(null)
   const [deletingId, setDeletingId] = useState('')
   const itemsPerPage = 10
-
-  async function loadTransactions() {
-    setLoading(true)
-    setError('')
-    try {
-      const response = await apiRequest('transactions', {
-        token: localStorage.getItem('budgetflow_token'),
-      })
-      if (!Array.isArray(response?.transactions)) {
-        throw new Error('The transactions service returned an invalid response.')
-      }
-      setTransactions(response.transactions)
-    } catch (requestError) {
-      setError(requestError.message || 'Could not load transactions.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadTransactions()
-  }, [])
 
   useEffect(() => {
     if (location.state?.successMessage) {
@@ -90,9 +73,7 @@ export function ClientTransactions() {
         method: 'DELETE',
         token: localStorage.getItem('budgetflow_token'),
       })
-      setTransactions((current) =>
-        current.filter((transaction) => transaction.id !== transactionToDelete.id),
-      )
+      removeTransaction(transactionToDelete.id)
       showToast('Transaction deleted.')
       setTransactionToDelete(null)
     } catch (requestError) {
@@ -164,7 +145,7 @@ export function ClientTransactions() {
         <Card>
           <div className="py-8 text-center">
             <p role="alert" className="text-sm text-rose-600">{error}</p>
-            <Button className="mt-4" onClick={loadTransactions} disabled={loading}>
+            <Button className="mt-4" onClick={refreshTransactions} disabled={loading}>
               {loading ? 'Retrying...' : 'Retry'}
             </Button>
           </div>

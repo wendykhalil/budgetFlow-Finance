@@ -34,7 +34,7 @@ export function BarChart({ data, xAxisKey, bars, height = 200, className = '' })
     }
   }, [data, xAxisKey, bars])
 
-  const maxValue = Math.max(...data.flatMap((d) => bars.map((b) => d[b.dataKey])))
+  const maxValue = Math.max(1, ...data.flatMap((d) => bars.map((b) => d[b.dataKey])))
   const chartWidth = 500
   const chartHeight = height
   const paddingLeft = 30

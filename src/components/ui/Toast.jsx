@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Icon from './Icon.jsx'
 
 export function Toast({ message, type = 'success', duration = 2500, onClose }) {
@@ -37,18 +37,22 @@ export function Toast({ message, type = 'success', duration = 2500, onClose }) {
 
 export function useToast() {
   const [toast, setToast] = useState({ message: '', type: 'success', visible: false })
+  const toastIdRef = useRef(0)
 
-  const showToast = (message, type = 'success', duration = 2500) => {
-    setToast({ message, type, visible: true, duration })
-  }
+  const showToast = useCallback((message, type = 'success', duration = 2500) => {
+    setToast({ id: ++toastIdRef.current, message, type, visible: true, duration })
+  }, [])
 
-  const hideToast = () => {
-    setToast({ message: '', type: 'success', visible: false, duration: 0 })
-  }
+  const hideToast = useCallback(() => {
+    setToast((current) => current.visible
+      ? { ...current, message: '', visible: false, duration: 0 }
+      : current,
+    )
+  }, [])
 
   const ToastComponent = toast.visible ? (
     <Toast
-      key={toast.message}
+      key={toast.id}
       message={toast.message}
       type={toast.type}
       duration={toast.duration}

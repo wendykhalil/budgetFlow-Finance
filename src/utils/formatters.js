@@ -9,6 +9,13 @@ export function formatCurrency(amount) {
   return `${sign}€${formatted}`
 }
 
+export function formatUserCurrency(amount, currency = 'EUR') {
+  return new Intl.NumberFormat('en-GB', {
+    style: 'currency',
+    currency,
+  }).format(Number(amount) || 0)
+}
+
 export function formatPrice(amount) {
   return new Intl.NumberFormat('de-DE', {
     style: 'currency',

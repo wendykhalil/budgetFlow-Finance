@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
-import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useTransactions } from '@/contexts/TransactionContext'
 import PageTitle from '@/components/layout/PageTitle'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -9,46 +9,29 @@ import Icon from '@/components/ui/Icon'
 import SummaryCard from '@/components/layout/SummaryCard'
 import BarChart from '@/components/charts/BarChart'
 import DonutChart from '@/components/charts/DonutChart'
-import { transactions, formatAmount } from '@/data/mockTransactions'
-import { budgets, getBudgetsByUser } from '@/data/mockBudgets'
-import { formatCurrency } from '@/utils/formatters'
+import { formatUserCurrency } from '@/utils/formatters'
+import { getDashboardMetrics } from '@/utils/dashboardMetrics'
 
 export function ClientDashboard() {
   const navigate = useNavigate()
   const { user } = useAuth()
-
-  const userTransactions = transactions.filter((t) => t.userId === user?.id)
-  const totalIncome = userTransactions.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0)
-  const totalExpenses = userTransactions.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
-  const totalBalance = totalIncome - totalExpenses
-
-  const recentTransactions = userTransactions.slice(0, 5)
-
-  const incomeData = [
-    { month: 'May', income: 72, expense: 105 },
-    { month: 'Jun', income: 64, expense: 115 },
-    { month: 'Jul', income: 58, expense: 90 },
-    { month: 'Aug', income: 45, expense: 110 },
-    { month: 'Sep', income: 48, expense: 112 },
-    { month: 'Oct', income: 33, expense: 118 },
-  ]
-
-  const donutData = [
-    { name: 'Housing', value: 750, color: '#155C4F' },
-    { name: 'Food', value: 420, color: '#4E9B8D' },
-    { name: 'Transport', value: 280, color: '#F3A852' },
-    { name: 'Shopping', value: 260, color: '#E87171' },
-    { name: 'Utilities', value: 240, color: '#7B83C6' },
-    { name: 'Other', value: 190, color: '#CBD5E1' },
-  ]
-
-  const budgetProgress = getBudgetsByUser(user?.id).slice(0, 6)
+  const {
+    transactions,
+    loading,
+    error,
+    refreshTransactions,
+  } = useTransactions()
+  const metrics = getDashboardMetrics(transactions)
+  const currency = user?.currency || 'EUR'
+  const dataAvailable = !loading || transactions.length > 0
+  const displayAmount = (amount) =>
+    dataAvailable ? formatUserCurrency(amount, currency) : '—'
 
   return (
     <>
       <PageTitle
         title={`Good morning, ${user?.firstName?.trim() || 'there'}`}
-        sub="Here's your financial overview for October 2026."
+        sub={`Here's your financial overview for ${metrics.monthLabel}.`}
         action={
           <Button onClick={() => navigate('/client/transactions/new')}>
             <Icon name="plus" className="size-4" /> Add transaction
@@ -56,11 +39,30 @@ export function ClientDashboard() {
         }
       />
 
+      {loading && transactions.length === 0 && (
+        <p role="status" className="mb-4 text-sm text-slate-500">
+          Loading financial data...
+        </p>
+      )}
+      {error && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <span role="alert">{error}</span>
+          <Button variant="secondary" size="sm" onClick={refreshTransactions} disabled={loading}>
+            Retry
+          </Button>
+        </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="Total balance" value={formatCurrency(totalBalance)} change="+8.4%" icon="wallet" tone="bg-emerald-50 text-emerald-700" />
-        <SummaryCard label="Total income" value={formatCurrency(totalIncome)} change="+5.2%" icon="chart" tone="bg-blue-50 text-blue-700" />
-        <SummaryCard label="Total expenses" value={formatCurrency(totalExpenses)} change="-4.2%" icon="card" tone="bg-rose-50 text-rose-600" />
-        <SummaryCard label="Savings" value={formatCurrency(totalBalance)} change="+12.1%" icon="activity" tone="bg-amber-50 text-amber-700" />
+        <SummaryCard label="Total balance" value={displayAmount(metrics.totalBalance)} icon="wallet" tone="bg-emerald-50 text-emerald-700" />
+        <SummaryCard label="Total income" value={displayAmount(metrics.totalIncome)} icon="chart" tone="bg-blue-50 text-blue-700" />
+        <SummaryCard label="Total expenses" value={displayAmount(metrics.totalExpenses)} icon="card" tone="bg-rose-50 text-rose-600" />
+        <SummaryCard
+          label="Net savings"
+          value={displayAmount(metrics.savings)}
+          icon="activity"
+          tone="bg-amber-50 text-amber-700"
+          subtitle="Completed income minus expenses"
+        />
       </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.55fr_1fr]">
@@ -68,20 +70,26 @@ export function ClientDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <div className="font-bold">Income vs expenses</div>
-              <div className="text-xs text-slate-400">May – October 2026</div>
+              <div className="text-xs text-slate-400">{metrics.year}</div>
             </div>
             <Badge tone="neutral">This year</Badge>
           </div>
           <div className="mt-7">
-            <BarChart
-              data={incomeData}
-              xAxisKey="month"
-              bars={[
-                { label: 'Income', dataKey: 'income', color: '#277666' },
-                { label: 'Expenses', dataKey: 'expense', color: '#D9E4E1' },
-              ]}
-              height={200}
-            />
+            {loading && transactions.length === 0 ? (
+              <div role="status" className="grid h-[200px] place-items-center text-sm text-slate-500">
+                Loading chart...
+              </div>
+            ) : (
+              <BarChart
+                data={metrics.monthlyTotals}
+                xAxisKey="month"
+                bars={[
+                  { label: 'Income', dataKey: 'income', color: '#277666' },
+                  { label: 'Expenses', dataKey: 'expense', color: '#D9E4E1' },
+                ]}
+                height={200}
+              />
+            )}
           </div>
           <div className="mt-5 flex justify-center gap-6 text-xs">
             <span className="flex items-center gap-2">
@@ -95,14 +103,25 @@ export function ClientDashboard() {
 
         <Card>
           <div className="font-bold">Expenses by category</div>
-          <div className="text-xs text-slate-400">October 2026</div>
+          <div className="text-xs text-slate-400">{metrics.monthLabel}</div>
           <div className="mt-6">
-            <DonutChart
-              data={donutData}
-              innerText="€2,140"
-              innerSubtext="Total spent"
-              height={200}
-            />
+            {metrics.expensesByCategory.length > 0 ? (
+              <DonutChart
+                data={metrics.expensesByCategory}
+                innerText={formatUserCurrency(
+                  metrics.expensesByCategory.reduce((sum, item) => sum + item.value, 0),
+                  currency,
+                )}
+                innerSubtext="Total spent"
+                height={200}
+              />
+            ) : (
+              <div className="grid h-[200px] place-items-center text-center text-sm text-slate-500">
+                {loading && transactions.length === 0
+                  ? 'Loading expenses...'
+                  : 'No completed expenses this month.'}
+              </div>
+            )}
           </div>
         </Card>
       </div>
@@ -128,20 +147,31 @@ export function ClientDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {recentTransactions.map((t) => (
-                  <tr key={t.id} className="hover:bg-slate-50/60">
-                    <td className="whitespace-nowrap px-5 py-4">
-                      <div className="text-xs text-slate-500">{formatDate(t.date)}</div>
-                      <div className="font-semibold">{t.description}</div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <Badge tone="neutral" size="sm">{t.category}</Badge>
-                    </td>
-                    <td className={`px-5 py-4 text-right font-bold ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-800'}`}>
-                      {formatAmount(t.type === 'expense' ? -t.amount : t.amount)}
+                {metrics.recentTransactions.length > 0 ? (
+                  metrics.recentTransactions.map((transaction) => (
+                    <tr key={transaction.id} className="hover:bg-slate-50/60">
+                      <td className="whitespace-nowrap px-5 py-4">
+                        <div className="text-xs text-slate-500">{formatDate(transaction.date)}</div>
+                        <div className="font-semibold">{transaction.description}</div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <Badge tone="neutral" size="sm">{transaction.category}</Badge>
+                      </td>
+                      <td className={`px-5 py-4 text-right font-bold ${transaction.type === 'income' ? 'text-emerald-600' : 'text-slate-800'}`}>
+                        {formatUserCurrency(
+                          transaction.type === 'expense' ? -transaction.amount : transaction.amount,
+                          currency,
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={3} className="px-5 py-8 text-center text-sm text-slate-500">
+                      {loading ? 'Loading transactions...' : 'No transactions yet. Add one to get started.'}
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -149,27 +179,9 @@ export function ClientDashboard() {
 
         <Card>
           <div className="font-bold">Budget progress</div>
-          <div className="text-xs text-slate-400">October spending limits</div>
-          <div className="mt-6 space-y-5">
-            {budgetProgress.map((b) => {
-              const progress = (b.spent / b.limit) * 100
-              const isExceeded = progress >= 100
-              const isWarning = progress >= 85 && progress < 100
-              return (
-                <div key={b.id}>
-                  <div className="mb-2 flex justify-between text-sm">
-                    <span className="font-semibold">{b.name}</span>
-                    <span className="text-slate-500">{formatCurrency(b.spent)} / {formatCurrency(b.limit)}</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-slate-100">
-                    <div
-                      className={`h-full rounded-full ${isExceeded ? 'bg-rose-500' : isWarning ? 'bg-amber-500' : 'bg-[#277666]'}`}
-                      style={{ width: `${Math.min(progress, 100)}%` }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
+          <div className="text-xs text-slate-400">Budget service</div>
+          <div className="mt-6 grid min-h-40 place-items-center text-center text-sm text-slate-500">
+            Budget progress is not available from the connected services yet.
           </div>
           <Button variant="secondary" className="mt-6 w-full" onClick={() => navigate('/client/budgets')}>
             Manage budgets
@@ -181,8 +193,11 @@ export function ClientDashboard() {
 }
 
 function formatDate(dateString) {
-  const options = { year: 'numeric', month: 'short', day: 'numeric' }
-  return new Date(dateString).toLocaleDateString('en-GB', options)
+  return new Date(`${dateString}T00:00:00`).toLocaleDateString('en-GB', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
 }
 
 export default ClientDashboard
