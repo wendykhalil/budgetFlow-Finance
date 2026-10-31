@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import Sidebar from '@/components/layout/Sidebar'
 import Header from '@/components/layout/Header'
 import TransactionProvider from '@/contexts/TransactionContext'
+import CategoryProvider from '@/contexts/CategoryContext'
 
 export function ClientLayout() {
   const { user, loading } = useAuth()
@@ -56,9 +57,11 @@ export function ClientLayout() {
           menuButtonRef={menuButtonRef}
         />
         <TransactionProvider>
-          <main className="p-4 md:p-7 lg:p-8">
-            <Outlet />
-          </main>
+          <CategoryProvider>
+            <main className="p-4 md:p-7 lg:p-8">
+              <Outlet />
+            </main>
+          </CategoryProvider>
         </TransactionProvider>
       </div>
     </div>

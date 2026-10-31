@@ -1,10 +1,12 @@
 const mongoose = require('mongoose');
+const Category = require('../models/Category');
 const Transaction = require('../models/Transaction');
 
 const transactionFields = [
   'date',
   'description',
   'category',
+  'categoryId',
   'type',
   'amount',
   'paymentMethod',
@@ -62,6 +64,10 @@ function readTransactionInput(body, partial = false) {
       if (!isValidDate(value)) {
         return { error: 'Date must be a valid YYYY-MM-DD date.' };
       }
+    } else if (field === 'categoryId') {
+      if (value !== null && (typeof value !== 'string' || !mongoose.isValidObjectId(value))) {
+        return { error: 'Category ID must be a valid identifier.' };
+      }
     } else if (field === 'description' || field === 'category') {
       if (!isNonEmptyString(value)) {
         return { error: `${field} is required.` };
@@ -96,11 +102,42 @@ function isValidId(id) {
   return mongoose.isValidObjectId(id);
 }
 
+async function findActiveCategory(categoryId, userId, type) {
+  if (!isValidId(categoryId)) {
+    return { error: 'Category not found.', status: 404 };
+  }
+
+  const category = await Category.findOne({
+    _id: categoryId,
+    userId,
+  });
+  if (!category) return { error: 'Category not found.', status: 404 };
+  if (category.isArchived) {
+    return { error: 'Archived categories cannot be assigned to transactions.', status: 400 };
+  }
+  if (category.type !== type) {
+    return { error: 'Category type must match the transaction type.', status: 400 };
+  }
+  return { category };
+}
+
 async function createTransaction(req, res, next) {
   try {
     const { updates, error } = readTransactionInput(req.body);
     if (error) {
       return res.status(400).json({ message: error });
+    }
+
+    if (updates.categoryId) {
+      const { category, error: categoryError, status } = await findActiveCategory(
+        updates.categoryId,
+        req.user.id,
+        updates.type,
+      );
+      if (categoryError) return res.status(status).json({ message: categoryError });
+      updates.category = category.name;
+    } else {
+      delete updates.categoryId;
     }
 
     const transaction = await Transaction.create({
@@ -156,9 +193,49 @@ async function updateTransaction(req, res, next) {
       return res.status(404).json({ message: 'Transaction not found.' });
     }
 
+    const currentTransaction = await Transaction.findOne({
+      _id: req.params.id,
+      userId: req.user.id,
+    });
+    if (!currentTransaction) {
+      return res.status(404).json({ message: 'Transaction not found.' });
+    }
+
+    let unsetCategoryId = false;
+    if (Object.prototype.hasOwnProperty.call(updates, 'categoryId')) {
+      if (updates.categoryId === null) {
+        delete updates.categoryId;
+        unsetCategoryId = true;
+      } else {
+        const { category, error: categoryError, status } = await findActiveCategory(
+          updates.categoryId,
+          req.user.id,
+          updates.type || currentTransaction.type,
+        );
+        if (categoryError) return res.status(status).json({ message: categoryError });
+        updates.category = category.name;
+      }
+    } else if (currentTransaction.categoryId) {
+      const linkedCategory = await Category.findOne({
+        _id: currentTransaction.categoryId,
+        userId: req.user.id,
+      });
+      if (linkedCategory) {
+        if (updates.type && updates.type !== linkedCategory.type) {
+          return res.status(400).json({
+            message: 'Category type must match the transaction type.',
+          });
+        }
+        updates.category = linkedCategory.name;
+      }
+    }
+
+    const updateOperation = unsetCategoryId
+      ? { $set: updates, $unset: { categoryId: 1 } }
+      : updates;
     const transaction = await Transaction.findOneAndUpdate(
       { _id: req.params.id, userId: req.user.id },
-      updates,
+      updateOperation,
       { new: true, runValidators: true },
     );
     if (!transaction) {

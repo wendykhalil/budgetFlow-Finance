@@ -9,6 +9,7 @@ process.env.FRONTEND_ORIGINS = 'http://localhost:8443';
 process.env.JWT_SECRET = 'test-secret-with-at-least-32-characters';
 
 const app = require('../src/app');
+const Category = require('../src/models/Category');
 const Transaction = require('../src/models/Transaction');
 const User = require('../src/models/User');
 const { attachSocketServer } = require('../src/socket');
@@ -254,7 +255,7 @@ describe('BudgetFlow API integration', () => {
     assert.equal(currentUser.status, 200);
     assert.equal((await currentUser.json()).user.id, userId);
 
-    for (const path of ['/api/auth/me', '/api/transactions']) {
+    for (const path of ['/api/auth/me', '/api/transactions', '/api/categories']) {
       const noToken = await request(path);
       assert.equal(noToken.status, 401);
 
@@ -450,6 +451,288 @@ describe('BudgetFlow API integration', () => {
     });
     assert.equal(ownerRead.status, 200);
     assert.equal((await ownerRead.json()).transaction.amount, 20);
+  });
+
+  it('creates, lists, updates, isolates, and deletes personal categories', async () => {
+    for (const [path, method, body] of [
+      ['/api/categories', 'GET'],
+      ['/api/categories', 'POST', { name: 'No auth', type: 'expense' }],
+      ['/api/categories/000000000000000000000001', 'PATCH', { name: 'No auth' }],
+      ['/api/categories/000000000000000000000001', 'DELETE'],
+    ]) {
+      const response = await request(path, { method, body });
+      assert.equal(response.status, 401, `${method} ${path} requires authentication`);
+    }
+
+    const created = await request('/api/categories', {
+      method: 'POST',
+      accessToken: token,
+      body: {
+        name: '  Travel  ',
+        type: 'expense',
+        color: '#12aBcD',
+        icon: 'plane',
+        userId: '000000000000000000000001',
+      },
+    });
+    assert.equal(created.status, 201);
+    const category = (await created.json()).category;
+    assert.equal(category.name, 'Travel');
+    assert.equal(category.userId, userId);
+    assert.equal(category.type, 'expense');
+    assert.equal(category.isArchived, false);
+    assert.equal(Object.hasOwn(category, 'normalizedName'), false);
+
+    const ownerList = await request('/api/categories', { accessToken: token });
+    assert.equal(ownerList.status, 200);
+    assert.ok((await ownerList.json()).categories.some((item) => item.id === category.id));
+
+    const otherList = await request('/api/categories', { accessToken: otherToken });
+    assert.equal(otherList.status, 200);
+    assert.deepEqual((await otherList.json()).categories, []);
+
+    const otherUpdate = await request(`/api/categories/${category.id}`, {
+      method: 'PATCH',
+      accessToken: otherToken,
+      body: { name: 'Hijacked' },
+    });
+    assert.equal(otherUpdate.status, 404);
+    const otherDelete = await request(`/api/categories/${category.id}`, {
+      method: 'DELETE',
+      accessToken: otherToken,
+    });
+    assert.equal(otherDelete.status, 404);
+
+    const duplicate = await request('/api/categories', {
+      method: 'POST',
+      accessToken: token,
+      body: { name: ' travel ', type: 'expense' },
+    });
+    assert.equal(duplicate.status, 409);
+
+    for (const invalidBody of [
+      { name: 'Invalid type', type: 'transfer' },
+      { name: 'Invalid color', type: 'expense', color: 'green' },
+      { name: 'Invalid icon', type: 'expense', icon: '../icon' },
+      { name: '   ', type: 'expense' },
+      { name: 'Invalid archived', type: 'expense', isArchived: 'true' },
+    ]) {
+      const invalid = await request('/api/categories', {
+        method: 'POST',
+        accessToken: token,
+        body: invalidBody,
+      });
+      assert.equal(invalid.status, 400, JSON.stringify(invalidBody));
+    }
+
+    const updated = await request(`/api/categories/${category.id}`, {
+      method: 'PATCH',
+      accessToken: token,
+      body: {
+        name: 'Commuting',
+        type: 'expense',
+        color: '#abc',
+        icon: 'train',
+        userId: otherToken,
+      },
+    });
+    assert.equal(updated.status, 200);
+    const updatedCategory = (await updated.json()).category;
+    assert.equal(updatedCategory.name, 'Commuting');
+    assert.equal(updatedCategory.userId, userId);
+    assert.equal(updatedCategory.color, '#abc');
+    assert.equal(updatedCategory.icon, 'train');
+
+    const removed = await request(`/api/categories/${category.id}`, {
+      method: 'DELETE',
+      accessToken: token,
+    });
+    assert.equal(removed.status, 200);
+    assert.equal((await removed.json()).action, 'deleted');
+
+    const missing = await request(`/api/categories/${category.id}`, {
+      method: 'PATCH',
+      accessToken: token,
+      body: { name: 'Missing' },
+    });
+    assert.equal(missing.status, 404);
+  });
+
+  it('validates category references and preserves legacy transaction categories', async () => {
+    const categoryResponse = await request('/api/categories', {
+      method: 'POST',
+      accessToken: token,
+      body: { name: 'Owner commute', type: 'expense' },
+    });
+    const category = (await categoryResponse.json()).category;
+
+    const foreignCategoryResponse = await request('/api/categories', {
+      method: 'POST',
+      accessToken: otherToken,
+      body: { name: 'Foreign commute', type: 'expense' },
+    });
+    const foreignCategory = (await foreignCategoryResponse.json()).category;
+
+    const validTransaction = await request('/api/transactions', {
+      method: 'POST',
+      accessToken: token,
+      body: {
+        date: '2026-10-28',
+        description: 'Category-linked trip',
+        category: 'Conflicting client name',
+        categoryId: category.id,
+        type: 'expense',
+        amount: 25,
+      },
+    });
+    assert.equal(validTransaction.status, 201);
+    const linkedTransaction = (await validTransaction.json()).transaction;
+    assert.equal(linkedTransaction.category, 'Owner commute');
+    assert.equal(linkedTransaction.categoryId, category.id);
+
+    const legacyTransaction = await request('/api/transactions', {
+      method: 'POST',
+      accessToken: token,
+      body: {
+        date: '2026-10-27',
+        description: 'Legacy category transaction',
+        category: 'Legacy free-text',
+        type: 'expense',
+        amount: 8,
+      },
+    });
+    assert.equal(legacyTransaction.status, 201);
+    const legacy = (await legacyTransaction.json()).transaction;
+    assert.equal(legacy.category, 'Legacy free-text');
+    assert.equal(Object.hasOwn(legacy, 'categoryId'), false);
+
+    const invalidCategoryReferences = [
+      { categoryId: 'not-an-object-id', type: 'expense', status: 400 },
+      { categoryId: '000000000000000000000099', type: 'expense', status: 404 },
+      { categoryId: foreignCategory.id, type: 'expense', status: 404 },
+      { categoryId: category.id, type: 'income', status: 400 },
+    ];
+    for (const { categoryId, type, status } of invalidCategoryReferences) {
+      const invalid = await request('/api/transactions', {
+        method: 'POST',
+        accessToken: token,
+        body: {
+          date: '2026-10-26',
+          description: 'Invalid category reference',
+          category: 'Client supplied',
+          categoryId,
+          type,
+          amount: 12,
+        },
+      });
+      assert.equal(invalid.status, status);
+    }
+
+    const renameOtherTransaction = await request('/api/transactions', {
+      method: 'POST',
+      accessToken: otherToken,
+      body: {
+        date: '2026-10-25',
+        description: 'Foreign legacy record',
+        category: 'Owner commute',
+        type: 'expense',
+        amount: 11,
+      },
+    });
+    assert.equal(renameOtherTransaction.status, 201);
+    const foreignLegacy = (await renameOtherTransaction.json()).transaction;
+
+    const renamed = await request(`/api/categories/${category.id}`, {
+      method: 'PATCH',
+      accessToken: token,
+      body: { name: 'Transit' },
+    });
+    assert.equal(renamed.status, 200);
+
+    const ownerLinkedAfterRename = await Transaction.findOne({
+      _id: linkedTransaction.id,
+      userId,
+    });
+    assert.equal(ownerLinkedAfterRename.category, 'Transit');
+    const foreignAfterRename = await Transaction.findById(foreignLegacy.id);
+    assert.equal(foreignAfterRename.category, 'Owner commute');
+
+    const archivedCategoryResponse = await request('/api/categories', {
+      method: 'POST',
+      accessToken: token,
+      body: { name: 'Archive me', type: 'expense' },
+    });
+    const archivedCategory = (await archivedCategoryResponse.json()).category;
+    const reference = await request('/api/transactions', {
+      method: 'POST',
+      accessToken: token,
+      body: {
+        date: '2026-10-24',
+        description: 'Archived category reference',
+        category: 'Old name',
+        categoryId: archivedCategory.id,
+        type: 'expense',
+        amount: 5,
+      },
+    });
+    assert.equal(reference.status, 201);
+
+    const archiveResponse = await request(`/api/categories/${archivedCategory.id}`, {
+      method: 'DELETE',
+      accessToken: token,
+    });
+    assert.equal(archiveResponse.status, 200);
+    assert.equal((await archiveResponse.json()).action, 'archived');
+
+    const defaultList = await request('/api/categories', { accessToken: token });
+    assert.ok(!(await defaultList.json()).categories.some((item) => item.id === archivedCategory.id));
+    const archivedList = await request('/api/categories?includeArchived=true', {
+      accessToken: token,
+    });
+    assert.ok((await archivedList.json()).categories.some(
+      (item) => item.id === archivedCategory.id && item.isArchived,
+    ));
+
+    const archivedAssignment = await request('/api/transactions', {
+      method: 'POST',
+      accessToken: token,
+      body: {
+        date: '2026-10-23',
+        description: 'Archived assignment attempt',
+        category: 'Archive me',
+        categoryId: archivedCategory.id,
+        type: 'expense',
+        amount: 5,
+      },
+    });
+    assert.equal(archivedAssignment.status, 400);
+
+    const archivedTransaction = await Transaction.findById(
+      (await reference.json()).transaction.id,
+    );
+    assert.equal(archivedTransaction.category, 'Archive me');
+    assert.equal(archivedTransaction.categoryId.toString(), archivedCategory.id);
+
+    const legacyUsedCategoryResponse = await request('/api/categories', {
+      method: 'POST',
+      accessToken: token,
+      body: { name: 'Legacy food', type: 'expense' },
+    });
+    const legacyUsedCategory = (await legacyUsedCategoryResponse.json()).category;
+    await Transaction.create({
+      date: '2026-10-22',
+      description: 'Case-insensitive legacy category reference',
+      category: 'LEGACY FOOD',
+      type: 'expense',
+      amount: 4,
+      userId,
+    });
+    const legacyArchive = await request(`/api/categories/${legacyUsedCategory.id}`, {
+      method: 'DELETE',
+      accessToken: token,
+    });
+    assert.equal(legacyArchive.status, 200);
+    assert.equal((await legacyArchive.json()).action, 'archived');
   });
 
   it('authenticates sockets and emits transaction events only to the owner', async () => {

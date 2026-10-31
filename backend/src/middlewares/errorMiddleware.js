@@ -14,7 +14,9 @@ function errorMiddleware(error, req, res, next) {
     message = error.name === 'ValidationError' ? 'Invalid input.' : 'Invalid identifier.';
   } else if (error.code === 11000) {
     statusCode = 409;
-    message = 'An account with this email already exists.';
+    message = error.keyPattern?.normalizedName
+      ? 'A category with this name and type already exists.'
+      : 'An account with this email already exists.';
   } else if (statusCode >= 500) {
     message = 'Server error.';
   }

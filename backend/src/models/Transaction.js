@@ -5,6 +5,7 @@ const transactionSchema = new mongoose.Schema(
     date: { type: String, required: true },
     description: { type: String, required: true, trim: true },
     category: { type: String, required: true, trim: true },
+    categoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
     type: { type: String, enum: ['income', 'expense'], required: true },
     amount: { type: Number, required: true, min: 0.01 },
     paymentMethod: { type: String, default: '' },
