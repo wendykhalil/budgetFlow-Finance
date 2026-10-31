@@ -1,15 +1,23 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef } from "react"
+import { formatUserCurrency } from "@/utils/formatters"
 
-export function BarChart({ data, xAxisKey, bars, height = 200, className = '' }) {
+export function BarChart({
+  data,
+  xAxisKey,
+  bars,
+  height = 200,
+  className = "",
+  currency = "EUR",
+}) {
   const containerRef = useRef(null)
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.Chart) {
+    if (typeof window !== "undefined" && window.Chart) {
       const ctx = containerRef.current
       if (ctx) {
-        ctx.innerHTML = ''
+        ctx.innerHTML = ""
         new window.Chart(ctx, {
-          type: 'bar',
+          type: "bar",
           data: {
             labels: data.map((d) => d[xAxisKey]),
             datasets: bars.map((bar, i) => ({
@@ -23,18 +31,38 @@ export function BarChart({ data, xAxisKey, bars, height = 200, className = '' })
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label(context) {
+                    return `${context.dataset.label}: ${formatUserCurrency(context.parsed.y, currency)}`
+                  },
+                },
+              },
+            },
             scales: {
               x: { grid: { display: false }, border: { display: false } },
-              y: { grid: { display: false }, border: { display: false } },
+              y: {
+                grid: { display: false },
+                border: { display: false },
+                ticks: {
+                  callback(value) {
+                    return formatUserCurrency(value, currency)
+                  },
+                },
+              },
             },
           },
         })
       }
     }
-  }, [data, xAxisKey, bars])
+  }, [data, xAxisKey, bars, currency])
 
-  const maxValue = Math.max(1, ...data.flatMap((d) => bars.map((b) => d[b.dataKey])))
+  const maxValue = Math.max(
+    1,
+    ...data.flatMap((d) => bars.map((b) => d[b.dataKey])),
+  )
   const chartWidth = 500
   const chartHeight = height
   const paddingLeft = 30
@@ -43,7 +71,11 @@ export function BarChart({ data, xAxisKey, bars, height = 200, className = '' })
   const barWidth = availableWidth / data.length / bars.length
 
   return (
-    <div ref={containerRef} className="relative h-full w-full" style={{ height: `${height}px` }}>
+    <div
+      ref={containerRef}
+      className="relative h-full w-full"
+      style={{ height: `${height}px` }}
+    >
       <svg
         className={`h-full w-full overflow-visible ${className}`}
         viewBox={`0 0 ${chartWidth} ${chartHeight}`}
@@ -52,10 +84,14 @@ export function BarChart({ data, xAxisKey, bars, height = 200, className = '' })
           {data.map((d, i) => {
             let offsetX = 0
             return (
-              <g key={d[xAxisKey]} transform={`translate(${i * (availableWidth / data.length)}, 0)`}>
+              <g
+                key={d[xAxisKey]}
+                transform={`translate(${i * (availableWidth / data.length)}, 0)`}
+              >
                 {bars.map((bar, j) => {
                   const value = d[bar.dataKey]
-                  const barH = (value / maxValue) * (chartHeight - paddingString - 20)
+                  const barH =
+                    (value / maxValue) * (chartHeight - paddingString - 20)
                   const x = offsetX
                   const y = chartHeight - paddingString - barH
                   const result = (
@@ -69,8 +105,15 @@ export function BarChart({ data, xAxisKey, bars, height = 200, className = '' })
                         rx={4}
                         ry={4}
                       />
+                      <title>{`${bar.label}: ${formatUserCurrency(value, currency)}`}</title>
                       {d.label && (
-                        <text x={x + barWidth / 2} y={y - 5} textAnchor="middle" fontSize={10} fill="#94a3b8">
+                        <text
+                          x={x + barWidth / 2}
+                          y={y - 5}
+                          textAnchor="middle"
+                          fontSize={10}
+                          fill="#94a3b8"
+                        >
                           {d.label}
                         </text>
                       )}
@@ -82,11 +125,22 @@ export function BarChart({ data, xAxisKey, bars, height = 200, className = '' })
               </g>
             )
           })}
-          <line x1={-paddingLeft} x2={chartWidth - paddingLeft} y1={chartHeight - paddingString} y2={chartHeight - paddingString} stroke="#e2e8f0" strokeWidth={1} />
+          <line
+            x1={-paddingLeft}
+            x2={chartWidth - paddingLeft}
+            y1={chartHeight - paddingString}
+            y2={chartHeight - paddingString}
+            stroke="#e2e8f0"
+            strokeWidth={1}
+          />
           {data.map((d, i) => (
             <text
               key={d[xAxisKey]}
-              x={i * (availableWidth / data.length) + barWidth * bars.length / 2 - paddingLeft / 2}
+              x={
+                i * (availableWidth / data.length) +
+                (barWidth * bars.length) / 2 -
+                paddingLeft / 2
+              }
               y={chartHeight - paddingString + 18}
               textAnchor="middle"
               fontSize={10}

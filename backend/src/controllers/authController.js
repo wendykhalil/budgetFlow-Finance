@@ -1,6 +1,8 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Transaction = require('../models/Transaction');
+const { isSupportedCurrency } = require('../utils/currencies');
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -28,6 +30,7 @@ async function register(req, res, next) {
     }
 
     const { firstName, lastName, email, password } = req.body || {};
+    const currency = req.body?.currency === undefined ? 'EUR' : req.body.currency;
     if (
       !isNonEmptyString(firstName) ||
       !isNonEmptyString(lastName) ||
@@ -41,6 +44,12 @@ async function register(req, res, next) {
         message: 'Enter first name, last name, a valid email, and a password of 6 to 72 bytes.',
       });
     }
+    if (!isSupportedCurrency(currency)) {
+      return res.status(400).json({
+        code: 'UNSUPPORTED_CURRENCY',
+        message: 'Choose a supported account currency.',
+      });
+    }
 
     const user = await User.create({
       firstName,
@@ -50,7 +59,7 @@ async function register(req, res, next) {
       password,
       role: 'client',
       status: 'active',
-      currency: isNonEmptyString(req.body.currency) ? req.body.currency.trim() : 'EUR',
+      currency,
       country: isNonEmptyString(req.body.country) ? req.body.country.trim() : 'France',
     });
 
@@ -87,4 +96,44 @@ function getCurrentUser(req, res) {
   return res.status(200).json({ user: req.user });
 }
 
-module.exports = { register, login, getCurrentUser };
+async function updateCurrency(req, res, next) {
+  try {
+    const { currency } = req.body || {};
+    if (!isSupportedCurrency(currency)) {
+      return res.status(400).json({
+        code: 'UNSUPPORTED_CURRENCY',
+        message: 'Choose a supported account currency.',
+      });
+    }
+
+    const currentCurrency = req.user.currency || 'EUR';
+    if (currency === currentCurrency) {
+      return res.status(200).json({ user: req.user });
+    }
+
+    const hasTransactions = await Transaction.exists({ userId: req.user.id });
+    if (hasTransactions) {
+      return res.status(409).json({
+        code: 'CURRENCY_CHANGE_REQUIRES_CONVERSION',
+        message:
+          'Currency cannot be changed after transactions exist. Changing currency requires a future explicit conversion feature.',
+      });
+    }
+
+    req.user.currency = currency;
+    await req.user.save();
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${req.user.id}`).emit('account:currency-updated', {
+        currency: req.user.currency,
+      });
+    }
+
+    return res.status(200).json({ user: req.user });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+module.exports = { register, login, getCurrentUser, updateCurrency };

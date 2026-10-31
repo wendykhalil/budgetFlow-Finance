@@ -1,41 +1,58 @@
-import PageTitle from '@/components/layout/PageTitle'
-import Badge from '@/components/ui/Badge'
-import Card from '@/components/ui/Card'
-import Select from '@/components/ui/Select'
-import BarChart from '@/components/charts/BarChart'
-import DonutChart from '@/components/charts/DonutChart'
-import { transactions } from '@/data/mockTransactions'
-import { formatCurrency } from '@/utils/formatters'
+import PageTitle from "@/components/layout/PageTitle"
+import Badge from "@/components/ui/Badge"
+import Card from "@/components/ui/Card"
+import Select from "@/components/ui/Select"
+import BarChart from "@/components/charts/BarChart"
+import DonutChart from "@/components/charts/DonutChart"
+import { formatUserCurrency } from "@/utils/formatters"
+import { useAuth } from "@/contexts/AuthContext"
 
 export function ClientAnalytics() {
+  const { user } = useAuth()
+  const currency = user?.currency || "EUR"
   const incomeData = [
-    { month: 'May', income: 72, expense: 105 },
-    { month: 'Jun', income: 64, expense: 115 },
-    { month: 'Jul', income: 58, expense: 90 },
-    { month: 'Aug', income: 45, expense: 110 },
-    { month: 'Sep', income: 48, expense: 112 },
-    { month: 'Oct', income: 33, expense: 118 },
+    { month: "May", income: 72, expense: 105 },
+    { month: "Jun", income: 64, expense: 115 },
+    { month: "Jul", income: 58, expense: 90 },
+    { month: "Aug", income: 45, expense: 110 },
+    { month: "Sep", income: 48, expense: 112 },
+    { month: "Oct", income: 33, expense: 118 },
   ]
 
   const donutData = [
-    { name: 'Housing', value: 750, color: '#155C4F' },
-    { name: 'Food', value: 420, color: '#4E9B8D' },
-    { name: 'Transport', value: 280, color: '#F3A852' },
-    { name: 'Shopping', value: 260, color: '#E87171' },
-    { name: 'Utilities', value: 240, color: '#7B83C6' },
-    { name: 'Other', value: 190, color: '#CBD5E1' },
+    { name: "Housing", value: 750, color: "#155C4F" },
+    { name: "Food", value: 420, color: "#4E9B8D" },
+    { name: "Transport", value: 280, color: "#F3A852" },
+    { name: "Shopping", value: 260, color: "#E87171" },
+    { name: "Utilities", value: 240, color: "#7B83C6" },
+    { name: "Other", value: 190, color: "#CBD5E1" },
   ]
 
   const incomeByCategory = [
-    { name: 'Salary', value: 3850, color: '#277666' },
-    { name: 'Freelance', value: 650, color: '#2563eb' },
-    { name: 'Investments', value: 450, color: '#7c3aed' },
+    { name: "Salary", value: 3850, color: "#277666" },
+    { name: "Freelance", value: 650, color: "#2563eb" },
+    { name: "Investments", value: 450, color: "#7c3aed" },
   ]
 
   const insights = [
-    { label: 'Expenses decreased', value: '8.2%', desc: 'compared with last month', tone: 'green' },
-    { label: 'Top spending', value: 'Housing', desc: '€750 this month', tone: 'amber' },
-    { label: 'Savings rate', value: '44%', desc: '12% above your goal', tone: 'blue' },
+    {
+      label: "Expenses decreased",
+      value: "8.2%",
+      desc: "compared with last month",
+      tone: "green",
+    },
+    {
+      label: "Top spending",
+      value: "Housing",
+      desc: `${formatUserCurrency(750, currency)} this month`,
+      tone: "amber",
+    },
+    {
+      label: "Savings rate",
+      value: "44%",
+      desc: "12% above your goal",
+      tone: "blue",
+    },
   ]
 
   return (
@@ -48,9 +65,9 @@ export function ClientAnalytics() {
             label="Analytics period (preview only)"
             disabled
             options={[
-              { value: '6m', label: 'Last 6 months' },
-              { value: 'month', label: 'This month' },
-              { value: 'year', label: 'This year' },
+              { value: "6m", label: "Last 6 months" },
+              { value: "month", label: "This month" },
+              { value: "year", label: "This year" },
             ]}
             defaultValue="6m"
           />
@@ -75,9 +92,10 @@ export function ClientAnalytics() {
               data={incomeData}
               xAxisKey="month"
               bars={[
-                { label: 'Income', dataKey: 'income', color: '#277666' },
-                { label: 'Expenses', dataKey: 'expense', color: '#D9E4E1' },
+                { label: "Income", dataKey: "income", color: "#277666" },
+                { label: "Expenses", dataKey: "expense", color: "#D9E4E1" },
               ]}
+              currency={currency}
               height={200}
             />
           </div>
@@ -87,7 +105,13 @@ export function ClientAnalytics() {
           <div className="font-bold">Income sources</div>
           <div className="text-xs text-slate-400">October 2026</div>
           <div className="mt-6">
-            <DonutChart data={incomeByCategory} height={200} />
+            <DonutChart
+              data={incomeByCategory}
+              innerText={formatUserCurrency(4950, currency)}
+              innerSubtext="Total income"
+              currency={currency}
+              height={200}
+            />
           </div>
         </Card>
       </div>
@@ -99,18 +123,19 @@ export function ClientAnalytics() {
           <div className="mt-7">
             <BarChart
               data={[
-                { month: 'May', income: 72, expense: 105 },
-                { month: 'Jun', income: 64, expense: 115 },
-                { month: 'Jul', income: 58, expense: 90 },
-                { month: 'Aug', income: 45, expense: 110 },
-                { month: 'Sep', income: 48, expense: 112 },
-                { month: 'Oct', income: 68, expense: 95 },
+                { month: "May", income: 72, expense: 105 },
+                { month: "Jun", income: 64, expense: 115 },
+                { month: "Jul", income: 58, expense: 90 },
+                { month: "Aug", income: 45, expense: 110 },
+                { month: "Sep", income: 48, expense: 112 },
+                { month: "Oct", income: 68, expense: 95 },
               ]}
               xAxisKey="month"
               bars={[
-                { label: 'Income', dataKey: 'income', color: '#277666' },
-                { label: 'Expenses', dataKey: 'expense', color: '#D9E4E1' },
+                { label: "Income", dataKey: "income", color: "#277666" },
+                { label: "Expenses", dataKey: "expense", color: "#D9E4E1" },
               ]}
+              currency={currency}
               height={200}
             />
           </div>

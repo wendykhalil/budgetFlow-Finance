@@ -1,53 +1,52 @@
-export function formatCurrency(amount) {
-  const sign = amount > 0 ? '+' : amount < 0 ? '-' : ''
-  const abs = Math.abs(amount)
-  const formatted = new Intl.NumberFormat('de-DE', {
-    style: 'decimal',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(abs)
-  return `${sign}€${formatted}`
+import { normalizeCurrency } from "@/utils/currencies"
+import { formatCalendarDate } from "@/utils/calendarDates"
+
+export function formatCurrency(amount, currency = "EUR") {
+  return formatSignedCurrency(amount, currency)
 }
 
-export function formatUserCurrency(amount, currency = 'EUR') {
-  return new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency,
+export function formatUserCurrency(amount, currency = "EUR") {
+  const safeCurrency = normalizeCurrency(currency)
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: safeCurrency,
   }).format(Number(amount) || 0)
 }
 
-export function formatPrice(amount) {
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency: 'EUR',
-    signDisplay: 'exceptZero',
-  }).format(amount).replace(/\s/g, '\u00A0')
+export function formatPrice(amount, currency = "EUR") {
+  return formatSignedCurrency(amount, currency)
+}
+
+export function formatSignedCurrency(amount, currency = "EUR") {
+  const safeCurrency = normalizeCurrency(currency)
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: safeCurrency,
+    signDisplay: "exceptZero",
+  }).format(Number(amount) || 0)
 }
 
 export function formatDate(dateString) {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('en-GB', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
+  return formatCalendarDate(dateString, "en-GB", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
   })
 }
 
 export function formatDateLong(dateString) {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
+  return formatCalendarDate(dateString, "en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   })
 }
 
 export function formatDateShort(dateString) {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('en-GB', {
-    month: 'short',
-    day: 'numeric',
+  return formatCalendarDate(dateString, "en-GB", {
+    month: "short",
+    day: "numeric",
   })
 }
 
@@ -57,14 +56,14 @@ export function calculateProgress(spent, limit) {
 }
 
 export function getTransactionTypeColor(type) {
-  return type === 'income' ? 'text-emerald-600' : 'text-slate-800'
+  return type === "income" ? "text-emerald-600" : "text-slate-800"
 }
 
 export function getBudgetStatus(spent, limit) {
   const progress = (spent / limit) * 100
-  if (progress >= 100) return 'exceeded'
-  if (progress >= 85) return 'warning'
-  return 'healthy'
+  if (progress >= 100) return "exceeded"
+  if (progress >= 85) return "warning"
+  return "healthy"
 }
 
 export function debounce(fn, delay) {
@@ -87,37 +86,72 @@ export function filterTransactions(transactions, filters) {
     result = result.filter(
       (t) =>
         t.description.toLowerCase().includes(search) ||
-        t.category.toLowerCase().includes(search)
+        t.category.toLowerCase().includes(search),
     )
   }
 
-  if (filters.type && filters.type !== 'all') {
+  if (filters.type && filters.type !== "all") {
     result = result.filter((t) => t.type === filters.type)
   }
 
-  if (filters.category && filters.category !== 'all') {
-    result = result.filter((t) => t.category === filters.category)
+  if (filters.status && filters.status !== "all") {
+    result = result.filter((transaction) =>
+      filters.status === "completed"
+        ? transaction.status == null || transaction.status === "completed"
+        : transaction.status === filters.status,
+    )
   }
 
-  if (filters.date && filters.date !== 'all') {
-    const now = new Date()
-    const currentMonth = now.getMonth() + 1
-    const currentYear = now.getFullYear()
+  if (filters.category && filters.category !== "all") {
+    if (typeof filters.category === "object") {
+      if (filters.category.kind === "linked") {
+        result = result.filter((transaction) => {
+          const categoryId =
+            typeof transaction.categoryId === "object"
+              ? transaction.categoryId?.id || transaction.categoryId?._id
+              : transaction.categoryId
+          return (
+            categoryId != null && String(categoryId) === filters.category.id
+          )
+        })
+      } else if (filters.category.kind === "legacy") {
+        result = result.filter(
+          (transaction) =>
+            !transaction.categoryId &&
+            transaction.category === filters.category.name &&
+            transaction.type === filters.category.type,
+        )
+      }
+    } else {
+      result = result.filter((t) => t.category === filters.category)
+    }
+  }
 
-    if (filters.date === 'this-month') {
-      result = result.filter((t) => {
-        const d = new Date(t.date)
-        return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear
-      })
-    } else if (filters.date === 'last-month') {
-      const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1
-      const lastYear = currentMonth === 1 ? currentYear - 1 : currentYear
-      result = result.filter((t) => {
-        const d = new Date(t.date)
-        return d.getMonth() + 1 === lastMonth && d.getFullYear() === lastYear
-      })
-    } else if (filters.date === 'this-year') {
-      result = result.filter((t) => new Date(t.date).getFullYear() === currentYear)
+  if (filters.date && filters.date !== "all") {
+    const now = filters.now || new Date()
+    const currentYear = now.getFullYear()
+    const currentMonthKey = `${currentYear}-${String(now.getMonth() + 1).padStart(2, "0")}`
+    const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const previousMonthKey = `${previousMonth.getFullYear()}-${String(previousMonth.getMonth() + 1).padStart(2, "0")}`
+
+    if (filters.date === "this-month") {
+      result = result.filter(
+        (transaction) =>
+          typeof transaction.date === "string" &&
+          transaction.date.startsWith(currentMonthKey),
+      )
+    } else if (filters.date === "last-month") {
+      result = result.filter(
+        (transaction) =>
+          typeof transaction.date === "string" &&
+          transaction.date.startsWith(previousMonthKey),
+      )
+    } else if (filters.date === "this-year") {
+      result = result.filter(
+        (transaction) =>
+          typeof transaction.date === "string" &&
+          transaction.date.startsWith(`${currentYear}-`),
+      )
     }
   }
 

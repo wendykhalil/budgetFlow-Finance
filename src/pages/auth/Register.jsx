@@ -1,25 +1,26 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
-import Logo from '@/components/layout/Logo'
-import Button from '@/components/ui/Button'
-import Input from '@/components/ui/Input'
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import { useAuth } from "@/contexts/AuthContext"
+import Logo from "@/components/layout/Logo"
+import Button from "@/components/ui/Button"
+import Input from "@/components/ui/Input"
+import { SUPPORTED_CURRENCIES } from "@/utils/currencies"
 
 export function Register() {
   const navigate = useNavigate()
   const { register } = useAuth()
 
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    password: '',
-    confirmPassword: '',
-    currency: 'EUR',
-    country: 'France',
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    password: "",
+    confirmPassword: "",
+    currency: "EUR",
+    country: "France",
   })
-  const [error, setError] = useState('')
+  const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
   const handleChange = (field, value) => {
@@ -30,16 +31,16 @@ export function Register() {
     e.preventDefault()
     if (loading) return
     setLoading(true)
-    setError('')
+    setError("")
 
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match')
+      setError("Passwords do not match")
       setLoading(false)
       return
     }
 
     if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters')
+      setError("Password must be at least 6 characters")
       setLoading(false)
       return
     }
@@ -54,10 +55,11 @@ export function Register() {
         currency: formData.currency,
         country: formData.country,
       })
-      const path = result.user.role === 'admin' ? '/admin/dashboard' : '/client/dashboard'
+      const path =
+        result.user.role === "admin" ? "/admin/dashboard" : "/client/dashboard"
       navigate(path, { replace: true })
     } catch (registrationError) {
-      setError(registrationError.message || 'Registration failed.')
+      setError(registrationError.message || "Registration failed.")
     } finally {
       setLoading(false)
     }
@@ -68,9 +70,7 @@ export function Register() {
       <h1 className="text-3xl font-bold tracking-tight text-slate-900">
         Create your account
       </h1>
-      <p className="mt-2 text-slate-500">
-        Start managing your finances today.
-      </p>
+      <p className="mt-2 text-slate-500">Start managing your finances today.</p>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-5">
         <div className="grid grid-cols-2 gap-4">
@@ -79,14 +79,14 @@ export function Register() {
             placeholder="Alex"
             required
             value={formData.firstName}
-            onChange={(e) => handleChange('firstName', e.target.value)}
+            onChange={(e) => handleChange("firstName", e.target.value)}
           />
           <Input
             label="Last name"
             placeholder="Martin"
             required
             value={formData.lastName}
-            onChange={(e) => handleChange('lastName', e.target.value)}
+            onChange={(e) => handleChange("lastName", e.target.value)}
           />
         </div>
         <Input
@@ -95,14 +95,14 @@ export function Register() {
           placeholder="alex.martin@example.com"
           required
           value={formData.email}
-          onChange={(e) => handleChange('email', e.target.value)}
+          onChange={(e) => handleChange("email", e.target.value)}
         />
         <Input
           label="Phone"
           type="tel"
           placeholder="+33 6 12 34 56 78"
           value={formData.phone}
-          onChange={(e) => handleChange('phone', e.target.value)}
+          onChange={(e) => handleChange("phone", e.target.value)}
         />
         <Input
           label="Password"
@@ -110,28 +110,52 @@ export function Register() {
           placeholder="Min 6 characters"
           required
           value={formData.password}
-          onChange={(e) => handleChange('password', e.target.value)}
+          onChange={(e) => handleChange("password", e.target.value)}
         />
         <Input
           label="Confirm password"
           type="password"
           required
           value={formData.confirmPassword}
-          onChange={(e) => handleChange('confirmPassword', e.target.value)}
+          onChange={(e) => handleChange("confirmPassword", e.target.value)}
         />
-        {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
+        <div>
+          <label
+            htmlFor="account-currency"
+            className="text-sm font-semibold text-slate-700"
+          >
+            Account currency
+          </label>
+          <select
+            id="account-currency"
+            value={formData.currency}
+            onChange={(e) => handleChange("currency", e.target.value)}
+            className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-600"
+          >
+            {SUPPORTED_CURRENCIES.map(({ code, name }) => (
+              <option key={code} value={code}>
+                {code} — {name}
+              </option>
+            ))}
+          </select>
+        </div>
+        {error && (
+          <p role="alert" className="text-sm text-rose-600">
+            {error}
+          </p>
+        )}
         <Button type="submit" disabled={loading} className="w-full">
-          {loading ? 'Creating account...' : 'Create account'}
+          {loading ? "Creating account..." : "Create account"}
         </Button>
       </form>
 
       <p className="mt-7 text-center text-sm text-slate-500">
-        Already have an account?{' '}
+        Already have an account?{" "}
         <button
-          onClick={() => navigate('/login')}
+          onClick={() => navigate("/login")}
           className="font-bold text-[#155C4F]"
         >
-         Sign in
+          Sign in
         </button>
       </p>
     </div>

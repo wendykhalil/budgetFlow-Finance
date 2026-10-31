@@ -1,21 +1,25 @@
-import { useState } from 'react'
-import PageTitle from '@/components/layout/PageTitle'
-import Button from '@/components/ui/Button'
-import Badge from '@/components/ui/Badge'
-import Card from '@/components/ui/Card'
-import Icon from '@/components/ui/Icon'
+import { useState } from "react"
+import PageTitle from "@/components/layout/PageTitle"
+import Button from "@/components/ui/Button"
+import Badge from "@/components/ui/Badge"
+import Card from "@/components/ui/Card"
+import Icon from "@/components/ui/Icon"
 
 export function ClientSettings() {
-  const [currency, setCurrency] = useState('EUR')
-  const [language, setLanguage] = useState('en')
-  const [dateFormat, setDateFormat] = useState('MM/dd/yyyy')
+  const [language, setLanguage] = useState("en")
+  const [dateFormat, setDateFormat] = useState("MM/dd/yyyy")
   const [showToast, setShowToast] = useState(false)
 
   const [settings, setSettings] = useState(() => {
-    const savedSettings = localStorage.getItem('budgetflow_client_settings')
+    const savedSettings = localStorage.getItem("budgetflow_client_settings")
     return savedSettings
       ? JSON.parse(savedSettings)
-      : { Account: true, Preferences: true, Notifications: true, Appearance: true }
+      : {
+          Account: true,
+          Preferences: true,
+          Notifications: true,
+          Appearance: true,
+        }
   })
 
   const toggleSetting = (name) => {
@@ -23,24 +27,21 @@ export function ClientSettings() {
   }
 
   const handleSave = () => {
-    localStorage.setItem('budgetflow_client_settings', JSON.stringify(settings))
+    localStorage.setItem("budgetflow_client_settings", JSON.stringify(settings))
     setShowToast(true)
     setTimeout(() => setShowToast(false), 2500)
   }
 
   return (
     <>
-      <PageTitle
-        title="Settings"
-        sub="Customize your BudgetFlow experience."
-      />
+      <PageTitle title="Settings" sub="Customize your BudgetFlow experience." />
 
       <div className="grid gap-5 lg:grid-cols-2">
         {[
-          ['Account', 'Personal information and password', 'user'],
-          ['Preferences', 'Currency, language, and date format', 'settings'],
-          ['Notifications', 'Budget alerts and monthly reports', 'bell'],
-          ['Appearance', 'Light and dark display mode', 'activity'],
+          ["Account", "Personal information and password", "user"],
+          ["Preferences", "Currency, language, and date format", "settings"],
+          ["Notifications", "Budget alerts and monthly reports", "bell"],
+          ["Appearance", "Light and dark display mode", "activity"],
         ].map(([t, d, icon]) => (
           <Card key={t}>
             <div className="flex items-start gap-4">
@@ -52,7 +53,13 @@ export function ClientSettings() {
                 <div className="mt-1 text-sm text-slate-500">{d}</div>
               </div>
               <label className="relative mt-1 inline-flex cursor-pointer items-center">
-                <input type="checkbox" aria-label={`Enable ${t} settings`} className="peer sr-only" checked={Boolean(settings[t])} onChange={() => toggleSetting(t)} />
+                <input
+                  type="checkbox"
+                  aria-label={`Enable ${t} settings`}
+                  className="peer sr-only"
+                  checked={Boolean(settings[t])}
+                  onChange={() => toggleSetting(t)}
+                />
                 <span className="h-6 w-11 rounded-full bg-slate-200 peer-checked:bg-[#155C4F] after:absolute after:left-1 after:top-1 after:size-4 after:rounded-full after:bg-white after:transition peer-checked:after:translate-x-5" />
               </label>
             </div>

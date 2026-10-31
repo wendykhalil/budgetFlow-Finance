@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { SUPPORTED_CURRENCIES } = require('../utils/currencies');
 
 const userSchema = new mongoose.Schema(
   {
@@ -10,7 +11,12 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: true, select: false },
     role: { type: String, enum: ['client', 'admin'], default: 'client' },
     status: { type: String, enum: ['active', 'pending', 'suspended'], default: 'active' },
-    currency: { type: String, default: 'EUR', trim: true },
+    currency: {
+      type: String,
+      enum: SUPPORTED_CURRENCIES,
+      default: 'EUR',
+      trim: true,
+    },
     country: { type: String, default: 'France', trim: true },
   },
   { timestamps: true },

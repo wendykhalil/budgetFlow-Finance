@@ -108,6 +108,16 @@ async function createCategory(req, res, next) {
       ...updates,
       userId: req.user.id,
     });
+
+    const io = req.app.get('io');
+    if (io) {
+      const eventCategory = category.toJSON();
+      delete eventCategory.userId;
+      io.to(`user:${req.user.id}`).emit('category:created', {
+        category: eventCategory,
+      });
+    }
+
     return res.status(201).json({ category });
   } catch (error) {
     return next(error);

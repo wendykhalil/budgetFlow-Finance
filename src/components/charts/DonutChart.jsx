@@ -1,4 +1,13 @@
-export function DonutChart({ data, innerText, innerSubtext, height = 200, className = '' }) {
+import { formatUserCurrency } from "@/utils/formatters"
+
+export function DonutChart({
+  data,
+  innerText,
+  innerSubtext,
+  height = 200,
+  className = "",
+  currency = "EUR",
+}) {
   const total = data.reduce((sum, d) => sum + d.value, 0)
   const radius = 45
   const centerX = 60
@@ -18,24 +27,45 @@ export function DonutChart({ data, innerText, innerSubtext, height = 200, classN
     const largeArc = angle > 180 ? 1 : 0
     const path = `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} L ${centerX} ${centerY} Z`
     startAngle += angle + gap
-    return { path, color: d.color, name: d.name }
+    return { path, color: d.color, name: d.name, value: d.value }
   })
 
-  const viewBox = '0 0 120 100'
+  const viewBox = "0 0 120 100"
 
   return (
     <div className={`relative ${className}`} style={{ height: `${height}px` }}>
       <svg viewBox={viewBox} className="h-full w-full overflow-visible">
         {arcs.map((arc) => (
-          <path key={arc.name} d={arc.path} fill={arc.color} stroke="white" strokeWidth="1.5" />
+          <path
+            key={arc.name}
+            d={arc.path}
+            fill={arc.color}
+            stroke="white"
+            strokeWidth="1.5"
+          >
+            <title>{`${arc.name}: ${formatUserCurrency(arc.value, currency)}`}</title>
+          </path>
         ))}
         {innerText && (
-          <text x={centerX} y={centerY} textAnchor="middle" fontSize={14} fontWeight="bold" fill="#0f172a">
+          <text
+            x={centerX}
+            y={centerY}
+            textAnchor="middle"
+            fontSize={14}
+            fontWeight="bold"
+            fill="#0f172a"
+          >
             {innerText}
           </text>
         )}
         {innerSubtext && (
-          <text x={centerX} y={centerY + 14} textAnchor="middle" fontSize={7} fill="#94a3b8">
+          <text
+            x={centerX}
+            y={centerY + 14}
+            textAnchor="middle"
+            fontSize={7}
+            fill="#94a3b8"
+          >
             {innerSubtext}
           </text>
         )}
@@ -43,7 +73,10 @@ export function DonutChart({ data, innerText, innerSubtext, height = 200, classN
       <div className="absolute bottom-0 left-0 right-0 flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs">
         {data.map((d) => (
           <span key={d.name} className="flex items-center gap-1.5">
-            <i className="size-2 rounded-full" style={{ background: d.color }} />
+            <i
+              className="size-2 rounded-full"
+              style={{ background: d.color }}
+            />
             {d.name}
           </span>
         ))}

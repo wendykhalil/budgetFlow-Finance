@@ -7,7 +7,7 @@ const transactionSchema = new mongoose.Schema(
     category: { type: String, required: true, trim: true },
     categoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
     type: { type: String, enum: ['income', 'expense'], required: true },
-    amount: { type: Number, required: true, min: 0.01 },
+    amount: { type: Number, required: true, min: 0.001 },
     paymentMethod: { type: String, default: '' },
     status: { type: String, enum: ['completed', 'pending'], default: 'completed' },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
