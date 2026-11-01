@@ -59,6 +59,16 @@ export function getTransactionTypeColor(type) {
   return type === "income" ? "text-emerald-600" : "text-slate-800"
 }
 
+export function formatPercent(value) {
+  const safeValue = Number(value)
+
+  if (!Number.isFinite(safeValue)) return "0%"
+
+  const normalized = Number(safeValue.toFixed(2))
+
+  return `${Number.isInteger(normalized) ? normalized.toFixed(0) : normalized.toString()}%`
+}
+
 export function getBudgetStatus(spent, limit) {
   const progress = (spent / limit) * 100
   if (progress >= 100) return "exceeded"

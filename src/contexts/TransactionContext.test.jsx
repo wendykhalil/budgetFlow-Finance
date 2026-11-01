@@ -19,6 +19,15 @@ vi.mock("@/contexts/CategoryContext", () => ({
   useCategories: vi.fn(() => ({ categories: [] })),
 }))
 
+vi.mock("@/contexts/BudgetContext", () => ({
+  useBudgets: () => ({
+    budgets: [],
+    loading: false,
+    error: "",
+    refreshBudgets: vi.fn(),
+  }),
+}))
+
 vi.mock("@/lib/api", () => ({
   apiRequest: vi.fn(),
 

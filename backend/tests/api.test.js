@@ -18,6 +18,8 @@ const app = require("../src/app")
 
 const Category = require("../src/models/Category")
 
+const Budget = require("../src/models/Budget")
+
 const Transaction = require("../src/models/Transaction")
 
 const User = require("../src/models/User")
@@ -127,6 +129,17 @@ async function socketEventNotReceived(socket, event, duration = 100) {
 
     socket.once(event, onEvent)
   })
+}
+
+async function createBudgetCategory(ownerId, type = "expense", isArchived = false) {
+  const category = await Category.create({
+    userId: ownerId,
+    name: `Budget category ${new mongoose.Types.ObjectId()}`,
+    type,
+    isArchived,
+  })
+
+  return category
 }
 
 describe("BudgetFlow API integration", () => {
@@ -1789,6 +1802,458 @@ describe("BudgetFlow API integration", () => {
       ownerSocket.disconnect()
 
       otherSocket.disconnect()
+    }
+  })
+
+  it("creates, isolates, reads, updates, and deletes monthly budgets", async () => {
+    const category = await createBudgetCategory(userId)
+    const otherUserId = jwt.decode(otherToken).sub
+    const otherCategory = await createBudgetCategory(otherUserId)
+    const otherBudget = await Budget.create({
+      userId: otherUserId,
+      categoryId: otherCategory.id,
+      name: "Other user's budget",
+      limit: 50,
+      period: "monthly",
+      startDate: "2024-02-01",
+    })
+
+    const create = await request("/api/budgets", {
+      method: "POST",
+      accessToken: token,
+      body: {
+        name: "Monthly groceries",
+        limit: 100,
+        categoryId: category.id,
+        period: "monthly",
+        startDate: "2024-02-01",
+      },
+    })
+
+    assert.equal(create.status, 201)
+    const created = (await create.json()).budget
+    assert.equal(created.name, "Monthly groceries")
+    assert.equal(created.period, "monthly")
+    assert.equal(created.categoryId.id, category.id)
+    assert.equal(created.startDate, "2024-02-01")
+
+    const invalidCategoryUpdate = await request(
+      `/api/budgets/${created.id}`,
+      {
+        method: "PATCH",
+        accessToken: token,
+        body: { categoryId: "not-an-id" },
+      },
+    )
+    assert.equal(invalidCategoryUpdate.status, 400)
+
+    const ownerList = await request("/api/budgets", { accessToken: token })
+    assert.equal(ownerList.status, 200)
+    assert.deepEqual(
+      (await ownerList.json()).budgets.map((budget) => budget.id),
+      [created.id],
+    )
+
+    const otherList = await request("/api/budgets", {
+      accessToken: otherToken,
+    })
+    assert.deepEqual(
+      (await otherList.json()).budgets.map((budget) => budget.id),
+      [otherBudget.id],
+    )
+
+    const read = await request(`/api/budgets/${created.id}`, {
+      accessToken: token,
+    })
+    assert.equal(read.status, 200)
+    assert.equal((await read.json()).budget.id, created.id)
+
+    const foreignRead = await request(`/api/budgets/${created.id}`, {
+      accessToken: otherToken,
+    })
+    assert.equal(foreignRead.status, 404)
+
+    const foreignUpdate = await request(`/api/budgets/${created.id}`, {
+      method: "PATCH",
+      accessToken: otherToken,
+      body: { name: "Changed by another user" },
+    })
+    assert.equal(foreignUpdate.status, 404)
+
+    const foreignDelete = await request(`/api/budgets/${created.id}`, {
+      method: "DELETE",
+      accessToken: otherToken,
+    })
+    assert.equal(foreignDelete.status, 404)
+
+    const duplicate = await request("/api/budgets", {
+      method: "POST",
+      accessToken: token,
+      body: {
+        name: "Duplicate month",
+        limit: 200,
+        categoryId: category.id,
+        period: "monthly",
+        startDate: "2024-02-01",
+      },
+    })
+    assert.equal(duplicate.status, 409)
+
+    const update = await request(`/api/budgets/${created.id}`, {
+      method: "PATCH",
+      accessToken: token,
+      body: {
+        name: "Updated groceries",
+        limit: 125,
+        startDate: "2024-03-01",
+      },
+    })
+    assert.equal(update.status, 200)
+    const updated = (await update.json()).budget
+    assert.equal(updated.name, "Updated groceries")
+    assert.equal(updated.limit, 125)
+    assert.equal(updated.startDate, "2024-03-01")
+
+    await Category.updateOne({ _id: category.id }, { isArchived: true })
+    const archivedCategoryRead = await request(`/api/budgets/${created.id}`, {
+      accessToken: token,
+    })
+    assert.equal(
+      (await archivedCategoryRead.json()).budget.categoryId.isArchived,
+      true,
+    )
+
+    const deleted = await request(`/api/budgets/${created.id}`, {
+      method: "DELETE",
+      accessToken: token,
+    })
+    assert.equal(deleted.status, 200)
+    assert.equal(
+      (await request(`/api/budgets/${created.id}`, { accessToken: token }))
+        .status,
+      404,
+    )
+  })
+
+  it("rejects invalid, archived, income, and foreign budget categories", async () => {
+    const activeExpense = await createBudgetCategory(userId)
+    const archivedExpense = await createBudgetCategory(userId, "expense", true)
+    const incomeCategory = await createBudgetCategory(userId, "income")
+    const foreignCategory = await createBudgetCategory(
+      jwt.decode(otherToken).sub,
+    )
+    const invalidCategoryIds = [
+      ["not-an-id", 400],
+      ["000000000000000000000099", 404],
+      [foreignCategory.id, 404],
+      [archivedExpense.id, 409],
+      [incomeCategory.id, 400],
+    ]
+
+    for (const [categoryId, expectedStatus] of invalidCategoryIds) {
+      const response = await request("/api/budgets", {
+        method: "POST",
+        accessToken: token,
+        body: {
+          name: "Invalid category budget",
+          limit: 100,
+          categoryId,
+          period: "monthly",
+          startDate: "2024-02-01",
+        },
+      })
+      assert.equal(response.status, expectedStatus, categoryId)
+    }
+
+    const nonMonthly = await request("/api/budgets", {
+      method: "POST",
+      accessToken: token,
+      body: {
+        name: "Not monthly",
+        limit: 100,
+        categoryId: activeExpense.id,
+        period: "yearly",
+        startDate: "2024-02-01",
+      },
+    })
+    assert.equal(nonMonthly.status, 400)
+  })
+
+  it("counts completed expenses in the exact calendar month and applies thresholds", async () => {
+    const category = await createBudgetCategory(userId)
+    const create = await request("/api/budgets", {
+      method: "POST",
+      accessToken: token,
+      body: {
+        name: "Leap month budget",
+        limit: 100,
+        categoryId: category.id,
+        period: "monthly",
+        startDate: "2024-02-01",
+      },
+    })
+    assert.equal(create.status, 201)
+    const budget = (await create.json()).budget
+
+    await Transaction.create([
+      {
+        date: "2024-02-29",
+        description: "Completed expense",
+        category: category.name,
+        categoryId: category.id,
+        type: "expense",
+        amount: 85,
+        status: "completed",
+        userId,
+      },
+      {
+        date: "2024-02-28",
+        description: "Pending expense",
+        category: category.name,
+        categoryId: category.id,
+        type: "expense",
+        amount: 30,
+        status: "pending",
+        userId,
+      },
+      {
+        date: "2024-02-27",
+        description: "Income",
+        category: category.name,
+        categoryId: category.id,
+        type: "income",
+        amount: 50,
+        status: "completed",
+        userId,
+      },
+    ])
+
+    const warning = await request(`/api/budgets/${budget.id}/spent`, {
+      accessToken: token,
+    })
+    assert.equal(warning.status, 200)
+    const warningResult = await warning.json()
+    assert.equal(warningResult.spent, 85)
+    assert.equal(warningResult.limit, 100)
+    assert.equal(warningResult.remaining, 15)
+    assert.equal(warningResult.percentUsed, 85)
+    assert.equal(warningResult.status, "warning")
+    assert.equal(warningResult.periodStart, "2024-02-01")
+    assert.equal(warningResult.periodEnd, "2024-02-29")
+
+    await Transaction.create({
+      date: "2024-02-29",
+      description: "Budget boundary expense",
+      category: category.name,
+      categoryId: category.id,
+      type: "expense",
+      amount: 15,
+      status: "completed",
+      userId,
+    })
+
+    const exceeded = await request(`/api/budgets/${budget.id}/spent`, {
+      accessToken: token,
+    })
+    const exceededResult = await exceeded.json()
+    assert.equal(exceededResult.spent, 100)
+    assert.equal(exceededResult.percentUsed, 100)
+    assert.equal(exceededResult.remaining, 0)
+    assert.equal(exceededResult.status, "exceeded")
+
+    await Transaction.create({
+      date: "2024-02-29",
+      description: "Over-budget expense",
+      category: category.name,
+      categoryId: category.id,
+      type: "expense",
+      amount: 5,
+      status: "completed",
+      userId,
+    })
+
+    const overBudget = await request(`/api/budgets/${budget.id}/spent`, {
+      accessToken: token,
+    })
+    assert.equal((await overBudget.json()).remaining, 0)
+  })
+
+  it("keeps percentage and status consistent at budget threshold boundaries", async () => {
+    const cases = [
+      { spent: 84.99, expectedPercent: 84.99, expectedStatus: "healthy" },
+      { spent: 85, expectedPercent: 85, expectedStatus: "warning" },
+      { spent: 99.99, expectedPercent: 99.99, expectedStatus: "warning" },
+      { spent: 100, expectedPercent: 100, expectedStatus: "exceeded" },
+      { spent: 105, expectedPercent: 105, expectedStatus: "exceeded" },
+    ]
+
+    for (const { spent, expectedPercent, expectedStatus } of cases) {
+      const category = await createBudgetCategory(userId)
+      const create = await request("/api/budgets", {
+        method: "POST",
+        accessToken: token,
+        body: {
+          name: "Boundary budget",
+          limit: 100,
+          categoryId: category.id,
+          period: "monthly",
+          startDate: "2024-03-01",
+        },
+      })
+      assert.equal(create.status, 201)
+      const budget = (await create.json()).budget
+
+      await Transaction.create({
+        date: "2024-03-15",
+        description: `Boundary expense ${spent}`,
+        category: category.name,
+        categoryId: category.id,
+        type: "expense",
+        amount: spent,
+        status: "completed",
+        userId,
+      })
+
+      const response = await request(`/api/budgets/${budget.id}/spent`, {
+        accessToken: token,
+      })
+      assert.equal(response.status, 200)
+      const result = await response.json()
+      assert.equal(result.spent, spent)
+      assert.equal(result.percentUsed, expectedPercent)
+      assert.equal(result.status, expectedStatus)
+      assert.equal(result.remaining, Math.max(0, 100 - spent))
+    }
+  })
+
+  it("enforces the authenticated account's currency precision for budget limits", async () => {
+    const eurCategory = await createBudgetCategory(userId)
+    const invalidEurLimit = await request("/api/budgets", {
+      method: "POST",
+      accessToken: token,
+      body: {
+        name: "Too precise EUR",
+        limit: 10.001,
+        categoryId: eurCategory.id,
+        period: "monthly",
+        startDate: "2024-02-01",
+      },
+    })
+    assert.equal(invalidEurLimit.status, 400)
+
+    const validEurLimit = await request("/api/budgets", {
+      method: "POST",
+      accessToken: token,
+      body: {
+        name: "Valid EUR precision",
+        limit: 10.01,
+        categoryId: eurCategory.id,
+        period: "monthly",
+        startDate: "2024-02-01",
+      },
+    })
+    assert.equal(validEurLimit.status, 201)
+    const eurBudgetId = (await validEurLimit.json()).budget.id
+
+    const invalidEurUpdate = await request(`/api/budgets/${eurBudgetId}`, {
+      method: "PATCH",
+      accessToken: token,
+      body: { limit: 11.001 },
+    })
+    assert.equal(invalidEurUpdate.status, 400)
+
+    const registration = await request("/api/auth/register", {
+      method: "POST",
+      body: {
+        firstName: "Tunisian",
+        lastName: "Budget Owner",
+        email: `budget-tnd-${process.pid}-${Date.now()}@example.test`,
+        password: "Client123!",
+        currency: "TND",
+      },
+    })
+    assert.equal(registration.status, 201)
+    const { token: tndToken, user: tndUser } = await registration.json()
+    const tndCategory = await createBudgetCategory(tndUser.id)
+
+    const validTndLimit = await request("/api/budgets", {
+      method: "POST",
+      accessToken: tndToken,
+      body: {
+        name: "Three decimal TND",
+        limit: 10.001,
+        categoryId: tndCategory.id,
+        period: "monthly",
+        startDate: "2024-02-01",
+      },
+    })
+    assert.equal(validTndLimit.status, 201)
+    const tndBudgetId = (await validTndLimit.json()).budget.id
+
+    const invalidTndUpdate = await request(`/api/budgets/${tndBudgetId}`, {
+      method: "PATCH",
+      accessToken: tndToken,
+      body: { limit: 10.0001 },
+    })
+    assert.equal(invalidTndUpdate.status, 400)
+  })
+
+  it("emits budget events only to the authenticated owner's room", async () => {
+    const category = await createBudgetCategory(userId)
+    const ownerSocket = await connectSocket({ token })
+    const observerSocket = await connectSocket({ token: otherToken })
+
+    try {
+      const createdEvent = nextSocketEvent(ownerSocket, "budget:created")
+      const foreignCreateEvent = socketEventNotReceived(
+        observerSocket,
+        "budget:created",
+      )
+      const createdResponse = await request("/api/budgets", {
+        method: "POST",
+        accessToken: token,
+        body: {
+          name: "Socket budget",
+          limit: 100,
+          categoryId: category.id,
+          period: "monthly",
+          startDate: "2024-05-01",
+        },
+      })
+      assert.equal(createdResponse.status, 201)
+      const created = (await createdResponse.json()).budget
+      assert.equal((await createdEvent).budget.id, created.id)
+      assert.equal(await foreignCreateEvent, true)
+
+      const updatedEvent = nextSocketEvent(ownerSocket, "budget:updated")
+      const foreignUpdateEvent = socketEventNotReceived(
+        observerSocket,
+        "budget:updated",
+      )
+      const updatedResponse = await request(`/api/budgets/${created.id}`, {
+        method: "PATCH",
+        accessToken: token,
+        body: { limit: 150 },
+      })
+      assert.equal(updatedResponse.status, 200)
+      assert.equal((await updatedEvent).budget.limit, 150)
+      assert.equal(await foreignUpdateEvent, true)
+
+      const deletedEvent = nextSocketEvent(ownerSocket, "budget:deleted")
+      const foreignDeleteEvent = socketEventNotReceived(
+        observerSocket,
+        "budget:deleted",
+      )
+      const deletedResponse = await request(`/api/budgets/${created.id}`, {
+        method: "DELETE",
+        accessToken: token,
+      })
+      assert.equal(deletedResponse.status, 200)
+      assert.deepEqual(await deletedEvent, { budgetId: created.id })
+      assert.equal(await foreignDeleteEvent, true)
+    } finally {
+      ownerSocket.disconnect()
+      observerSocket.disconnect()
     }
   })
 })
