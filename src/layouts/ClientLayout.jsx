@@ -1,10 +1,11 @@
-import { useCallback, useRef, useState } from 'react'
-import { Navigate, Outlet, useLocation } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
-import Sidebar from '@/components/layout/Sidebar'
-import Header from '@/components/layout/Header'
-import TransactionProvider from '@/contexts/TransactionContext'
-import CategoryProvider from '@/contexts/CategoryContext'
+import { useCallback, useRef, useState } from "react"
+import { Navigate, Outlet, useLocation } from "react-router-dom"
+import { useAuth } from "@/contexts/AuthContext"
+import Sidebar from "@/components/layout/Sidebar"
+import Header from "@/components/layout/Header"
+import TransactionProvider from "@/contexts/TransactionContext"
+import CategoryProvider from "@/contexts/CategoryContext"
+import BudgetProvider from "@/contexts/BudgetContext"
 
 export function ClientLayout() {
   const { user, loading } = useAuth()
@@ -18,27 +19,31 @@ export function ClientLayout() {
   }, [])
 
   if (loading) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>
+    return (
+      <div className="flex h-screen items-center justify-center">
+        Loading...
+      </div>
+    )
   }
 
   if (!user) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />
   }
 
-  if (user.role !== 'client') {
+  if (user.role !== "client") {
     return <Navigate to="/unauthorized" replace />
   }
 
   const clientNav = [
-    { name: 'Dashboard', icon: 'grid', path: '/client/dashboard' },
-    { name: 'Transactions', icon: 'card', path: '/client/transactions' },
-    { name: 'Budgets', icon: 'wallet', path: '/client/budgets' },
-    { name: 'Categories', icon: 'tag', path: '/client/categories' },
-    { name: 'Analytics', icon: 'chart', path: '/client/analytics' },
-    { name: 'Calendar', icon: 'calendar', path: '/client/calendar' },
-    { name: 'Notifications', icon: 'bell', path: '/client/notifications' },
-    { name: 'Profile', icon: 'user', path: '/client/profile' },
-    { name: 'Settings', icon: 'settings', path: '/client/settings' },
+    { name: "Dashboard", icon: "grid", path: "/client/dashboard" },
+    { name: "Transactions", icon: "card", path: "/client/transactions" },
+    { name: "Budgets", icon: "wallet", path: "/client/budgets" },
+    { name: "Categories", icon: "tag", path: "/client/categories" },
+    { name: "Analytics", icon: "chart", path: "/client/analytics" },
+    { name: "Calendar", icon: "calendar", path: "/client/calendar" },
+    { name: "Notifications", icon: "bell", path: "/client/notifications" },
+    { name: "Profile", icon: "user", path: "/client/profile" },
+    { name: "Settings", icon: "settings", path: "/client/settings" },
   ]
 
   return (
@@ -58,9 +63,11 @@ export function ClientLayout() {
         />
         <TransactionProvider>
           <CategoryProvider>
-            <main className="p-4 md:p-7 lg:p-8">
-              <Outlet />
-            </main>
+            <BudgetProvider>
+              <main className="p-4 md:p-7 lg:p-8">
+                <Outlet />
+              </main>
+            </BudgetProvider>
           </CategoryProvider>
         </TransactionProvider>
       </div>

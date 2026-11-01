@@ -4,6 +4,8 @@ import { useAuth } from "@/contexts/AuthContext"
 
 import { useTransactions } from "@/contexts/TransactionContext"
 
+import { useBudgets } from "@/contexts/BudgetContext"
+
 import PageTitle from "@/components/layout/PageTitle"
 
 import Button from "@/components/ui/Button"
@@ -20,10 +22,46 @@ import BarChart from "@/components/charts/BarChart"
 
 import DonutChart from "@/components/charts/DonutChart"
 
-import { formatUserCurrency } from "@/utils/formatters"
+import Progress from "@/components/ui/Progress"
+
+import {
+  formatCurrency,
+  formatPercent,
+  formatUserCurrency,
+} from "@/utils/formatters"
 
 import { getDashboardMetrics } from "@/utils/dashboardMetrics"
 import { formatCalendarDate } from "@/utils/calendarDates"
+import { getLocalDateString } from "@/utils/calendarDates"
+
+const budgetStatusTones = {
+  healthy: "green",
+  warning: "amber",
+  exceeded: "red",
+}
+
+function getBudgetUpdatedTime(budget) {
+  const updated = Date.parse(budget.updatedAt || budget.createdAt || "")
+  return Number.isFinite(updated) ? updated : 0
+}
+
+function getTopCurrentMonthBudgets(budgets, month) {
+  return budgets
+    .filter(
+      (budget) =>
+        typeof budget.startDate === "string" &&
+        budget.startDate.slice(0, 7) === month &&
+        typeof budget.spending?.percentUsed === "number",
+    )
+    .slice()
+    .sort(
+      (left, right) =>
+        right.spending.percentUsed - left.spending.percentUsed ||
+        getBudgetUpdatedTime(right) - getBudgetUpdatedTime(left) ||
+        String(left.id).localeCompare(String(right.id)),
+    )
+    .slice(0, 3)
+}
 
 export function ClientDashboard() {
   const navigate = useNavigate()
@@ -40,9 +78,19 @@ export function ClientDashboard() {
     refreshTransactions,
   } = useTransactions()
 
+  const {
+    budgets,
+    loading: budgetsLoading,
+    error: budgetsError,
+    refreshBudgets,
+  } = useBudgets()
+
   const metrics = getDashboardMetrics(transactions)
 
   const currency = user?.currency || "EUR"
+
+  const currentMonth = getLocalDateString().slice(0, 7)
+  const topBudgets = getTopCurrentMonthBudgets(budgets, currentMonth)
 
   const dataAvailable = !loading || transactions.length > 0
 
@@ -268,11 +316,111 @@ export function ClientDashboard() {
         </Card>
 
         <Card>
-          <div className="font-bold">Budget progress</div>
-          <div className="text-xs text-slate-400">Budget service</div>
-          <div className="mt-6 grid min-h-40 place-items-center text-center text-sm text-slate-500">
-            Budget progress is not available from the connected services yet.
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="font-bold">Budget progress</div>
+              <div className="text-xs text-slate-400">{metrics.monthLabel}</div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/client/budgets")}
+            >
+              View all
+            </Button>
           </div>
+
+          {budgetsLoading ? (
+            <div
+              role="status"
+              className="mt-6 grid min-h-40 place-items-center text-sm text-slate-500"
+            >
+              Loading budgets...
+            </div>
+          ) : budgetsError ? (
+            <div className="mt-6 grid min-h-40 place-items-center gap-3 text-center">
+              <p role="alert" className="text-sm text-rose-700">
+                {budgetsError}
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={refreshBudgets}
+                disabled={budgetsLoading}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : topBudgets.length === 0 ? (
+            <div className="mt-6 grid min-h-40 place-items-center gap-3 text-center">
+              <p className="text-sm text-slate-500">
+                No budgets for this month yet.
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => navigate("/client/budgets/new")}
+              >
+                Create a budget
+              </Button>
+            </div>
+          ) : (
+            <div className="mt-5 space-y-5">
+              {topBudgets.map((budget) => {
+                const spending = budget.spending
+                const percentUsed = spending.percentUsed
+                const status = budgetStatusTones[spending.status]
+                  ? spending.status
+                  : "healthy"
+
+                return (
+                  <div key={budget.id} className="space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-800">
+                          {budget.categoryId?.name || "Archived category"}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {formatCurrency(spending.spent, currency)} of{" "}
+                          {formatCurrency(spending.limit, currency)}
+                        </p>
+                      </div>
+                      <Badge tone={budgetStatusTones[status]} size="sm">
+                        {status}
+                      </Badge>
+                    </div>
+                    <div
+                      role="progressbar"
+                      aria-label={`${budget.categoryId?.name || "Archived category"} budget usage`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Math.min(Math.max(percentUsed, 0), 100)}
+                    >
+                      <Progress
+                        value={Math.max(percentUsed, 0)}
+                        color={
+                          status === "exceeded"
+                            ? "rose"
+                            : status === "warning"
+                              ? "amber"
+                              : "emerald"
+                        }
+                      />
+                    </div>
+                    <div className="flex justify-between gap-3 text-xs">
+                      <span className="font-medium text-slate-600">
+                        {formatPercent(percentUsed)} used
+                      </span>
+                      <span className="text-slate-500">
+                        {formatCurrency(spending.remaining, currency)} remaining
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           <Button
             variant="secondary"
             className="mt-6 w-full"
