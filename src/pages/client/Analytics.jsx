@@ -1,41 +1,111 @@
-import PageTitle from '@/components/layout/PageTitle'
-import Badge from '@/components/ui/Badge'
-import Card from '@/components/ui/Card'
-import Select from '@/components/ui/Select'
-import BarChart from '@/components/charts/BarChart'
-import DonutChart from '@/components/charts/DonutChart'
-import { transactions } from '@/data/mockTransactions'
-import { formatCurrency } from '@/utils/formatters'
+import PageTitle from "@/components/layout/PageTitle"
+import Badge from "@/components/ui/Badge"
+import Card from "@/components/ui/Card"
+import Select from "@/components/ui/Select"
+import Alert from "@/components/ui/Alert"
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton"
+import BarChart from "@/components/charts/BarChart"
+import DonutChart from "@/components/charts/DonutChart"
+import { formatUserCurrency } from "@/utils/formatters"
+import { useAuth } from "@/contexts/AuthContext"
+import { useAnalytics } from "@/hooks/useAnalytics"
 
 export function ClientAnalytics() {
-  const incomeData = [
-    { month: 'May', income: 72, expense: 105 },
-    { month: 'Jun', income: 64, expense: 115 },
-    { month: 'Jul', income: 58, expense: 90 },
-    { month: 'Aug', income: 45, expense: 110 },
-    { month: 'Sep', income: 48, expense: 112 },
-    { month: 'Oct', income: 33, expense: 118 },
-  ]
+  const { user } = useAuth()
+  const currency = user?.currency || "EUR"
+  const { data, loading, error, refetch } = useAnalytics()
 
-  const donutData = [
-    { name: 'Housing', value: 750, color: '#155C4F' },
-    { name: 'Food', value: 420, color: '#4E9B8D' },
-    { name: 'Transport', value: 280, color: '#F3A852' },
-    { name: 'Shopping', value: 260, color: '#E87171' },
-    { name: 'Utilities', value: 240, color: '#7B83C6' },
-    { name: 'Other', value: 190, color: '#CBD5E1' },
-  ]
+  if (loading) {
+    return (
+      <>
+        <PageTitle
+          title="Financial analytics"
+          sub="Understand your habits and make confident decisions."
+        />
+        <div className="grid gap-4 md:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i}>
+              <LoadingSkeleton height={120} />
+            </Card>
+          ))}
+        </div>
+        <div className="mt-5 grid gap-5 xl:grid-cols-[1.55fr_1fr]">
+          <Card>
+            <LoadingSkeleton height={300} />
+          </Card>
+          <Card>
+            <LoadingSkeleton height={300} />
+          </Card>
+        </div>
+      </>
+    )
+  }
 
-  const incomeByCategory = [
-    { name: 'Salary', value: 3850, color: '#277666' },
-    { name: 'Freelance', value: 650, color: '#2563eb' },
-    { name: 'Investments', value: 450, color: '#7c3aed' },
-  ]
+  if (error) {
+    return (
+      <>
+        <PageTitle
+          title="Financial analytics"
+          sub="Understand your habits and make confident decisions."
+        />
+        <Alert
+          variant="error"
+          title="Failed to load analytics"
+          description={error}
+          action={{ label: "Retry", onClick: refetch }}
+        />
+      </>
+    )
+  }
+
+  if (!data) {
+    return (
+      <>
+        <PageTitle
+          title="Financial analytics"
+          sub="Understand your habits and make confident decisions."
+        />
+        <Alert
+          variant="info"
+          title="No data available"
+          description="Start adding transactions to see your financial analytics."
+        />
+      </>
+    )
+  }
+
+  const {
+    monthlyBalance = [],
+    expensesByCategory = [],
+    incomeByCategory = [],
+    insights: apiInsights = {},
+  } = data
+
+  // Mapper les insights de l'API vers le format UI
+  const monthOverMonthPercent = apiInsights.monthOverMonthChange || 0
+  const monthOverMonthSign = monthOverMonthPercent > 0 ? "↓" : "↑"
+  const monthOverMonthTone = monthOverMonthPercent > 0 ? "green" : "red"
 
   const insights = [
-    { label: 'Expenses decreased', value: '8.2%', desc: 'compared with last month', tone: 'green' },
-    { label: 'Top spending', value: 'Housing', desc: '€750 this month', tone: 'amber' },
-    { label: 'Savings rate', value: '44%', desc: '12% above your goal', tone: 'blue' },
+    {
+      label:
+        "Expenses " + (monthOverMonthPercent > 0 ? "decreased" : "increased"),
+      value: `${Math.abs(monthOverMonthPercent)}%`,
+      desc: "compared with last month",
+      tone: monthOverMonthTone,
+    },
+    {
+      label: "Top spending",
+      value: apiInsights.topSpendingCategory || "—",
+      desc: `${formatUserCurrency(apiInsights.topSpendingAmount || 0, currency)} this month`,
+      tone: "amber",
+    },
+    {
+      label: "Savings rate",
+      value: `${apiInsights.savingsRate || 0}%`,
+      desc: "of your income saved",
+      tone: "blue",
+    },
   ]
 
   return (
@@ -45,10 +115,12 @@ export function ClientAnalytics() {
         sub="Understand your habits and make confident decisions."
         action={
           <Select
+            label="Analytics period (preview only)"
+            disabled
             options={[
-              { value: '6m', label: 'Last 6 months' },
-              { value: 'month', label: 'This month' },
-              { value: 'year', label: 'This year' },
+              { value: "6m", label: "Last 6 months" },
+              { value: "month", label: "This month" },
+              { value: "year", label: "This year" },
             ]}
             defaultValue="6m"
           />
@@ -69,48 +141,70 @@ export function ClientAnalytics() {
         <Card>
           <div className="font-bold">Balance trend</div>
           <div className="mt-7">
-            <BarChart
-              data={incomeData}
-              xAxisKey="month"
-              bars={[
-                { label: 'Income', dataKey: 'income', color: '#277666' },
-                { label: 'Expenses', dataKey: 'expense', color: '#D9E4E1' },
-              ]}
-              height={200}
-            />
+            {monthlyBalance.length > 0 ? (
+              <BarChart
+                data={monthlyBalance}
+                xAxisKey="month"
+                bars={[
+                  { label: "Income", dataKey: "income", color: "#277666" },
+                  { label: "Expenses", dataKey: "expense", color: "#D9E4E1" },
+                ]}
+                currency={currency}
+                height={200}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-[200px] text-slate-400">
+                No transaction data for the last 6 months
+              </div>
+            )}
           </div>
         </Card>
 
         <Card>
           <div className="font-bold">Income sources</div>
-          <div className="text-xs text-slate-400">October 2026</div>
+          <div className="text-xs text-slate-400">This month</div>
           <div className="mt-6">
-            <DonutChart data={incomeByCategory} height={200} />
+            {incomeByCategory.length > 0 ? (
+              <DonutChart
+                data={incomeByCategory}
+                innerText={formatUserCurrency(
+                  incomeByCategory.reduce((sum, item) => sum + item.value, 0),
+                  currency,
+                )}
+                innerSubtext="Total income"
+                currency={currency}
+                height={200}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-[200px] text-slate-400">
+                No income transactions this month
+              </div>
+            )}
           </div>
         </Card>
       </div>
 
       <div className="mt-5">
         <Card>
-          <div className="font-bold">Monthly comparison</div>
-          <div className="text-xs text-slate-400">vs. previous period</div>
+          <div className="font-bold">Expenses by category</div>
+          <div className="text-xs text-slate-400">This month</div>
           <div className="mt-7">
-            <BarChart
-              data={[
-                { month: 'May', income: 72, expense: 105 },
-                { month: 'Jun', income: 64, expense: 115 },
-                { month: 'Jul', income: 58, expense: 90 },
-                { month: 'Aug', income: 45, expense: 110 },
-                { month: 'Sep', income: 48, expense: 112 },
-                { month: 'Oct', income: 68, expense: 95 },
-              ]}
-              xAxisKey="month"
-              bars={[
-                { label: 'Income', dataKey: 'income', color: '#277666' },
-                { label: 'Expenses', dataKey: 'expense', color: '#D9E4E1' },
-              ]}
-              height={200}
-            />
+            {expensesByCategory.length > 0 ? (
+              <DonutChart
+                data={expensesByCategory}
+                innerText={formatUserCurrency(
+                  expensesByCategory.reduce((sum, item) => sum + item.value, 0),
+                  currency,
+                )}
+                innerSubtext="Total expenses"
+                currency={currency}
+                height={200}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-[200px] text-slate-400">
+                No expense transactions this month
+              </div>
+            )}
           </div>
         </Card>
       </div>

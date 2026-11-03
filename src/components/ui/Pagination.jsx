@@ -1,6 +1,12 @@
-import Icon from './Icon.jsx'
+import Icon from "./Icon.jsx"
 
-export function Pagination({ currentPage, totalPages, onPageChange, totalItems, itemsPerPage }) {
+export function Pagination({
+  currentPage,
+  totalPages,
+  onPageChange,
+  totalItems,
+  itemsPerPage,
+}) {
   const pages = []
   const maxVisible = 3
   const start = Math.max(1, currentPage - 1)
@@ -31,10 +37,12 @@ export function Pagination({ currentPage, totalPages, onPageChange, totalItems, 
             <button
               key={page}
               onClick={() => onPageChange?.(page)}
+              aria-label={`Go to page ${page}`}
+              aria-current={page === currentPage ? "page" : undefined}
               className={`grid size-8 place-items-center rounded-xl text-sm font-semibold ${
                 page === currentPage
-                  ? 'bg-[#155C4F] text-white'
-                  : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  ? "bg-[#155C4F] text-white"
+                  : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               }`}
             >
               {page}

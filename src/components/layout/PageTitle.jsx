@@ -1,4 +1,4 @@
-import Icon from '../ui/Icon.jsx'
+import Icon from "../ui/Icon.jsx"
 
 export function PageTitle({ title, sub, action, breadcrumbs }) {
   return (
@@ -14,7 +14,9 @@ export function PageTitle({ title, sub, action, breadcrumbs }) {
             ))}
           </div>
         )}
-        <div className="text-2xl font-bold tracking-tight md:text-3xl">{title}</div>
+        <div className="text-2xl font-bold tracking-tight md:text-3xl">
+          {title}
+        </div>
         {sub && <p className="mt-1 text-sm text-slate-500">{sub}</p>}
       </div>
       {action && <div className="flex-shrink-0">{action}</div>}
