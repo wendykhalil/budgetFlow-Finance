@@ -1,19 +1,27 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
-import fs from 'node:fs'
-import path from 'node:path'
+import { defineConfig, loadEnv } from "vite"
+import react from "@vitejs/plugin-react"
+import tailwindcss from "@tailwindcss/vite"
+import fs from "node:fs"
+import path from "node:path"
 
-import siteConfiguration from './.figma/make/site.json'
+import siteConfiguration from "./.figma/make/site.json"
+import { resolveApiBaseUrl } from "./src/lib/apiUrl.js"
 
 export default defineConfig(({ mode }) => {
-  const emitSourcemaps = mode === 'development'
+  const publicEnvironment = loadEnv(mode, process.cwd(), "VITE_")
+  if (mode === "production") {
+    resolveApiBaseUrl(publicEnvironment.VITE_API_URL, false)
+  }
+
+  const emitSourcemaps = mode === "development"
 
   return {
-    base: process.env.FIGMA_PUBLIC_URL ? `${process.env.FIGMA_PUBLIC_URL}/` : '/',
-    ...(mode === 'test' ? { esbuild: { jsx: 'automatic' } } : {}),
+    base: process.env.FIGMA_PUBLIC_URL
+      ? `${process.env.FIGMA_PUBLIC_URL}/`
+      : "/",
+    ...(mode === "test" ? { esbuild: { jsx: "automatic" } } : {}),
     build: {
-      sourcemap: emitSourcemaps ? 'inline' : false,
+      sourcemap: emitSourcemaps ? "inline" : false,
       minify: !emitSourcemaps,
     },
     plugins: [
@@ -22,59 +30,66 @@ export default defineConfig(({ mode }) => {
       figmaSiteConfiguration(siteConfiguration),
       figmaErrorOverlayReplay(),
       figmaReactRefreshBoundaryFallback(),
-      figmaMakeKitPlugin({ storiesGlob: '/src/**/*.stories.{js,jsx}' }),
+      figmaMakeKitPlugin({ storiesGlob: "/src/**/*.stories.{js,jsx}" }),
       figmaLinkedPackageSourcemaps(),
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, './src'),
+        "@": path.resolve(__dirname, "./src"),
       },
     },
     server: {
-      host: process.env.FIGMA_DEV_SERVER_HOST || '0.0.0.0',
-      port: parseInt(process.env.PORT || '8443'),
+      host: process.env.FIGMA_DEV_SERVER_HOST || "0.0.0.0",
+      port: parseInt(process.env.PORT || "8443"),
       strictPort: true,
       watch: {
-        ignored: ['**/.figma/**'],
+        ignored: ["**/.figma/**"],
       },
     },
     preview: {
-      host: process.env.FIGMA_DEV_SERVER_HOST || '0.0.0.0',
-      port: parseInt(process.env.PORT || '8443'),
+      host: process.env.FIGMA_DEV_SERVER_HOST || "0.0.0.0",
+      port: parseInt(process.env.PORT || "8443"),
     },
   }
 })
 
 function figmaSiteConfiguration(config) {
   function sanitizeHtmlValue(value) {
-    return value?.replace(/[^a-zA-Z0-9_-]/g, '') || ''
+    return value?.replace(/[^a-zA-Z0-9_-]/g, "") || ""
   }
   function escapeHtmlText(value) {
-    return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
   }
   function replaceHtmlCommentSlot(html, slotName, content) {
     return html.replace(`<!-- ${slotName} -->`, content)
   }
 
-  const title = config.title ?? 'Figma Make App'
-  const description = config.description ?? ''
-  const favicon = config.icons?.icon ?? '/favicon.svg'
-  const socialImage = config.openGraph?.image ?? ''
-  const language = sanitizeHtmlValue(config.language) || 'en'
-  const googleAnalyticsId = sanitizeHtmlValue(config.analytics?.googleAnalyticsId)
-  const headStart = config.customScripts?.headStart ?? ''
-  const headEnd = config.customScripts?.headEnd ?? ''
-  const bodyStart = config.customScripts?.bodyStart ?? ''
-  const bodyEnd = config.customScripts?.bodyEnd ?? ''
-  const robotsTxt = config.robots?.index === false ? 'User-agent: *\nDisallow: /\n' : ''
+  const title = config.title ?? "Figma Make App"
+  const description = config.description ?? ""
+  const favicon = config.icons?.icon ?? "/favicon.svg"
+  const socialImage = config.openGraph?.image ?? ""
+  const language = sanitizeHtmlValue(config.language) || "en"
+  const googleAnalyticsId = sanitizeHtmlValue(
+    config.analytics?.googleAnalyticsId,
+  )
+  const headStart = config.customScripts?.headStart ?? ""
+  const headEnd = config.customScripts?.headEnd ?? ""
+  const bodyStart = config.customScripts?.bodyStart ?? ""
+  const bodyEnd = config.customScripts?.bodyEnd ?? ""
+  const robotsTxt =
+    config.robots?.index === false ? "User-agent: *\nDisallow: /\n" : ""
 
   return {
-    name: 'figma-site-configuration',
+    name: "figma-site-configuration",
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        if (!robotsTxt || req.url?.split('?')[0] !== '/robots.txt') return next()
+        if (!robotsTxt || req.url?.split("?")[0] !== "/robots.txt")
+          return next()
 
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+        res.setHeader("Content-Type", "text/plain; charset=utf-8")
         res.end(robotsTxt)
       })
     },
@@ -82,65 +97,101 @@ function figmaSiteConfiguration(config) {
       if (!robotsTxt) return
 
       this.emitFile({
-        type: 'asset',
-        fileName: 'robots.txt',
+        type: "asset",
+        fileName: "robots.txt",
         source: robotsTxt,
       })
     },
     transformIndexHtml: {
-      order: 'pre',
+      order: "pre",
       handler(html) {
         let result = html
-        result = replaceHtmlCommentSlot(result, 'figma:lang', language)
-        result = replaceHtmlCommentSlot(result, 'figma:title', escapeHtmlText(title))
-        result = replaceHtmlCommentSlot(result, 'figma:head-start', headStart)
-        result = replaceHtmlCommentSlot(result, 'figma:head-end', headEnd)
-        result = replaceHtmlCommentSlot(result, 'figma:body-start', bodyStart)
-        result = replaceHtmlCommentSlot(result, 'figma:body-end', bodyEnd)
+        result = replaceHtmlCommentSlot(result, "figma:lang", language)
+        result = replaceHtmlCommentSlot(
+          result,
+          "figma:title",
+          escapeHtmlText(title),
+        )
+        result = replaceHtmlCommentSlot(result, "figma:head-start", headStart)
+        result = replaceHtmlCommentSlot(result, "figma:head-end", headEnd)
+        result = replaceHtmlCommentSlot(result, "figma:body-start", bodyStart)
+        result = replaceHtmlCommentSlot(result, "figma:body-end", bodyEnd)
 
         const tags = []
         if (description) {
-          tags.push({ tag: 'meta', attrs: { name: 'description', content: description }, injectTo: 'head' })
+          tags.push({
+            tag: "meta",
+            attrs: { name: "description", content: description },
+            injectTo: "head",
+          })
         }
         if (config.robots?.index === false) {
-          tags.push({ tag: 'meta', attrs: { name: 'robots', content: 'noindex, nofollow' }, injectTo: 'head' })
+          tags.push({
+            tag: "meta",
+            attrs: { name: "robots", content: "noindex, nofollow" },
+            injectTo: "head",
+          })
         }
         if (favicon) {
-          tags.push({ tag: 'link', attrs: { rel: 'icon', href: favicon }, injectTo: 'head' })
+          tags.push({
+            tag: "link",
+            attrs: { rel: "icon", href: favicon },
+            injectTo: "head",
+          })
         }
         if (title) {
-          tags.push({ tag: 'meta', attrs: { property: 'og:title', content: title }, injectTo: 'head' })
+          tags.push({
+            tag: "meta",
+            attrs: { property: "og:title", content: title },
+            injectTo: "head",
+          })
         }
         if (description) {
-          tags.push({ tag: 'meta', attrs: { property: 'og:description', content: description }, injectTo: 'head' })
+          tags.push({
+            tag: "meta",
+            attrs: { property: "og:description", content: description },
+            injectTo: "head",
+          })
         }
         if (socialImage) {
           tags.push(
-            { tag: 'meta', attrs: { property: 'og:image', content: socialImage }, injectTo: 'head' },
-            { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' }, injectTo: 'head' },
-            { tag: 'meta', attrs: { name: 'twitter:image', content: socialImage }, injectTo: 'head' },
+            {
+              tag: "meta",
+              attrs: { property: "og:image", content: socialImage },
+              injectTo: "head",
+            },
+            {
+              tag: "meta",
+              attrs: { name: "twitter:card", content: "summary_large_image" },
+              injectTo: "head",
+            },
+            {
+              tag: "meta",
+              attrs: { name: "twitter:image", content: socialImage },
+              injectTo: "head",
+            },
           )
         }
 
         if (googleAnalyticsId) {
           tags.push(
             {
-              tag: 'script',
+              tag: "script",
               attrs: {
                 async: true,
                 src: `https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}`,
               },
-              injectTo: 'head',
+              injectTo: "head",
             },
             {
-              tag: 'script',
+              tag: "script",
               children: `
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
   gtag('config', ${JSON.stringify(googleAnalyticsId)});
 `,
-              injectTo: 'head',
+              injectTo: "head",
             },
           )
         }
@@ -148,7 +199,7 @@ function figmaSiteConfiguration(config) {
         if (config.accessibility?.addBypassLinks) {
           tags.push(
             {
-              tag: 'style',
+              tag: "style",
               children: `
   .figma-bypass-link {
     position: fixed;
@@ -167,13 +218,13 @@ function figmaSiteConfiguration(config) {
     transform: translateY(0);
   }
 `,
-              injectTo: 'head',
+              injectTo: "head",
             },
             {
-              tag: 'a',
-              attrs: { class: 'figma-bypass-link', href: '#root' },
-              children: 'Skip to content',
-              injectTo: 'body-prepend',
+              tag: "a",
+              attrs: { class: "figma-bypass-link", href: "#root" },
+              children: "Skip to content",
+              injectTo: "body-prepend",
             },
           )
         }
@@ -189,26 +240,26 @@ function figmaSiteConfiguration(config) {
 
 function figmaErrorOverlayReplay() {
   return {
-    name: 'figma-error-overlay-replay',
-    apply: 'serve',
+    name: "figma-error-overlay-replay",
+    apply: "serve",
     configureServer(server) {
       let lastError = null
 
       const origSend = server.ws.send.bind(server.ws)
-      server.ws.send = ((...args) => {
+      server.ws.send = (...args) => {
         const payload = args[0]
-        if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+        if (payload && typeof payload === "object" && !Array.isArray(payload)) {
           const type = payload.type
-          if (type === 'error') {
+          if (type === "error") {
             lastError = payload
-          } else if (type === 'update' || type === 'full-reload') {
+          } else if (type === "update" || type === "full-reload") {
             lastError = null
           }
         }
         return origSend(...args)
-      })
+      }
 
-      server.ws.on('connection', (socket) => {
+      server.ws.on("connection", (socket) => {
         if (lastError !== null) {
           socket.send(JSON.stringify(lastError))
         }
@@ -223,11 +274,11 @@ function figmaReactRefreshBoundaryFallback() {
   let sendFullReload = null
 
   return {
-    name: 'figma-react-refresh-boundary-fallback',
-    apply: 'serve',
-    enforce: 'post',
+    name: "figma-react-refresh-boundary-fallback",
+    apply: "serve",
+    enforce: "post",
     configureServer(server) {
-      sendFullReload = () => server.ws.send({ type: 'full-reload', path: '*' })
+      sendFullReload = () => server.ws.send({ type: "full-reload", path: "*" })
     },
     handleHotUpdate({ modules, server, timestamp }) {
       if (lostRefreshBoundaries.size === 0) return
@@ -239,11 +290,16 @@ function figmaReactRefreshBoundaryFallback() {
         if (!current || visited.has(current)) continue
         visited.add(current)
 
-        const moduleId = current.id?.split('?')[0]
+        const moduleId = current.id?.split("?")[0]
         if (moduleId && lostRefreshBoundaries.has(moduleId)) {
           const invalidated = new Set()
           for (const updatedModule of modules) {
-            server.moduleGraph.invalidateModule(updatedModule, invalidated, timestamp, true)
+            server.moduleGraph.invalidateModule(
+              updatedModule,
+              invalidated,
+              timestamp,
+              true,
+            )
           }
           sendFullReload?.()
           return []
@@ -253,10 +309,10 @@ function figmaReactRefreshBoundaryFallback() {
       }
     },
     transform(code, id) {
-      if (!/\.jsx?$/.test(id) || id.includes('/node_modules/')) return null
+      if (!/\.jsx?$/.test(id) || id.includes("/node_modules/")) return null
 
-      const moduleId = id.split('?')[0] ?? id
-      const hasRefreshBoundary = code.includes('registerExportsForReactRefresh')
+      const moduleId = id.split("?")[0] ?? id
+      const hasRefreshBoundary = code.includes("registerExportsForReactRefresh")
       const previousHadRefreshBoundary = hadRefreshBoundary.get(moduleId)
       hadRefreshBoundary.set(moduleId, hasRefreshBoundary)
 
@@ -272,10 +328,12 @@ function figmaReactRefreshBoundaryFallback() {
 }
 
 function figmaMakeKitPlugin(options) {
-  const storiesGlob = Array.isArray(options.storiesGlob) ? options.storiesGlob : [options.storiesGlob]
-  const ROUTE = '/.figma/make/kit.html'
-  const VIRTUAL_ID = 'virtual:figma-stories'
-  const RESOLVED_ID = '\0' + VIRTUAL_ID
+  const storiesGlob = Array.isArray(options.storiesGlob)
+    ? options.storiesGlob
+    : [options.storiesGlob]
+  const ROUTE = "/.figma/make/kit.html"
+  const VIRTUAL_ID = "virtual:figma-stories"
+  const RESOLVED_ID = "\0" + VIRTUAL_ID
   const STORIES_MODULE = `export const stories = import.meta.glob(${JSON.stringify(storiesGlob)})`
   const HTML_BOOTSTRAP = `<!doctype html>
 <html lang="en">
@@ -294,8 +352,8 @@ function figmaMakeKitPlugin(options) {
 </html>`
 
   return {
-    name: 'figma-make-kit',
-    apply: 'serve',
+    name: "figma-make-kit",
+    apply: "serve",
     resolveId(id) {
       if (id === VIRTUAL_ID) return RESOLVED_ID
       return null
@@ -306,11 +364,11 @@ function figmaMakeKitPlugin(options) {
     },
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        const url = req.url || ''
-        if (url.split('?')[0] !== ROUTE) return next()
+        const url = req.url || ""
+        if (url.split("?")[0] !== ROUTE) return next()
 
         try {
-          res.setHeader('Content-Type', 'text/html')
+          res.setHeader("Content-Type", "text/html")
           res.end(await server.transformIndexHtml(url, HTML_BOOTSTRAP))
         } catch (err) {
           next(err)
@@ -321,12 +379,19 @@ function figmaMakeKitPlugin(options) {
 }
 
 function figmaLinkedPackageSourcemaps() {
-  const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf8'))
-  const linkedPackages = Object.keys({ ...packageJson.dependencies, ...packageJson.devDependencies }).flatMap((name) => {
-    const installedDir = path.resolve(__dirname, 'node_modules', name)
+  const packageJson = JSON.parse(
+    fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8"),
+  )
+  const linkedPackages = Object.keys({
+    ...packageJson.dependencies,
+    ...packageJson.devDependencies,
+  }).flatMap((name) => {
+    const installedDir = path.resolve(__dirname, "node_modules", name)
     try {
       const realDir = fs.realpathSync(installedDir)
-      return realDir.split(path.sep).includes('node_modules') ? [] : [{ installedDir, realDir }]
+      return realDir.split(path.sep).includes("node_modules")
+        ? []
+        : [{ installedDir, realDir }]
     } catch {
       return []
     }
@@ -334,40 +399,58 @@ function figmaLinkedPackageSourcemaps() {
   const sourceMappingUrl = /\/\/# sourceMappingURL=(\S+)\s*$/
 
   function installedPath(file) {
-    const linked = linkedPackages.find(({ realDir }) => file.startsWith(realDir + path.sep))
-    return linked && path.join(linked.installedDir, path.relative(linked.realDir, file))
+    const linked = linkedPackages.find(({ realDir }) =>
+      file.startsWith(realDir + path.sep),
+    )
+    return (
+      linked &&
+      path.join(linked.installedDir, path.relative(linked.realDir, file))
+    )
   }
   function readSourceMap(file, code) {
     const url = sourceMappingUrl.exec(code)?.[1]
     try {
-      if (url?.startsWith('data:')) {
-        return { map: JSON.parse(Buffer.from(url.split(',')[1], 'base64').toString()), mapDir: path.dirname(file) }
+      if (url?.startsWith("data:")) {
+        return {
+          map: JSON.parse(Buffer.from(url.split(",")[1], "base64").toString()),
+          mapDir: path.dirname(file),
+        }
       }
       if (url) {
         const mapFile = path.resolve(path.dirname(file), url)
-        return { map: JSON.parse(fs.readFileSync(mapFile, 'utf8')), mapDir: path.dirname(mapFile) }
+        return {
+          map: JSON.parse(fs.readFileSync(mapFile, "utf8")),
+          mapDir: path.dirname(mapFile),
+        }
       }
     } catch {}
-    const mappings = code.split('\n').map((_, i) => (i ? 'AACA' : 'AAAA'))
-    const map = { version: 3, sources: [file], sourcesContent: [code], names: [], mappings: mappings.join(';') }
+    const mappings = code.split("\n").map((_, i) => (i ? "AACA" : "AAAA"))
+    const map = {
+      version: 3,
+      sources: [file],
+      sourcesContent: [code],
+      names: [],
+      mappings: mappings.join(";"),
+    }
     return { map, mapDir: path.dirname(file) }
   }
 
   return {
-    name: 'figma-linked-package-sourcemaps',
-    enforce: 'pre',
+    name: "figma-linked-package-sourcemaps",
+    enforce: "pre",
     load(id) {
-      if (id.includes('?') || !/\.jsx?$/.test(id) || !installedPath(id)) return null
+      if (id.includes("?") || !/\.jsx?$/.test(id) || !installedPath(id))
+        return null
 
-      const code = fs.readFileSync(id, 'utf8')
+      const code = fs.readFileSync(id, "utf8")
       const { map, mapDir } = readSourceMap(id, code)
-      const sourceRoot = path.resolve(mapDir, map.sourceRoot ?? '')
+      const sourceRoot = path.resolve(mapDir, map.sourceRoot ?? "")
       map.sources = map.sources.map((source) => {
         const original = path.resolve(sourceRoot, source)
         return installedPath(original) ?? original
       })
       delete map.sourceRoot
-      return { code: code.replace(sourceMappingUrl, ''), map }
+      return { code: code.replace(sourceMappingUrl, ""), map }
     },
   }
 }
