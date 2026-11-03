@@ -1,7 +1,7 @@
 function notFoundMiddleware(req, res) {
   res.status(404).json({
-    message: 'Route not found.',
-  });
+    message: "Route not found.",
+  })
 }
 
-module.exports = notFoundMiddleware;
+module.exports = notFoundMiddleware
