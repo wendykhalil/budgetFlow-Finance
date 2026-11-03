@@ -8,8 +8,11 @@ export function BarChart({
   height = 200,
   className = "",
   currency = "EUR",
+  valueFormatter,
 }) {
   const containerRef = useRef(null)
+  const formatValue =
+    valueFormatter || ((value) => formatUserCurrency(value, currency))
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.Chart) {
@@ -36,7 +39,7 @@ export function BarChart({
               tooltip: {
                 callbacks: {
                   label(context) {
-                    return `${context.dataset.label}: ${formatUserCurrency(context.parsed.y, currency)}`
+                    return `${context.dataset.label}: ${formatValue(context.parsed.y)}`
                   },
                 },
               },
@@ -48,7 +51,7 @@ export function BarChart({
                 border: { display: false },
                 ticks: {
                   callback(value) {
-                    return formatUserCurrency(value, currency)
+                    return formatValue(value)
                   },
                 },
               },
@@ -57,7 +60,7 @@ export function BarChart({
         })
       }
     }
-  }, [data, xAxisKey, bars, currency])
+  }, [data, xAxisKey, bars, currency, valueFormatter])
 
   const maxValue = Math.max(
     1,
@@ -105,7 +108,7 @@ export function BarChart({
                         rx={4}
                         ry={4}
                       />
-                      <title>{`${bar.label}: ${formatUserCurrency(value, currency)}`}</title>
+                      <title>{`${bar.label}: ${formatValue(value)}`}</title>
                       {d.label && (
                         <text
                           x={x + barWidth / 2}

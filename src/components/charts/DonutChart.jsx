@@ -7,7 +7,10 @@ export function DonutChart({
   height = 200,
   className = "",
   currency = "EUR",
+  valueFormatter,
 }) {
+  const formatValue =
+    valueFormatter || ((value) => formatUserCurrency(value, currency))
   const total = data.reduce((sum, d) => sum + d.value, 0)
   const radius = 45
   const centerX = 60
@@ -43,7 +46,7 @@ export function DonutChart({
             stroke="white"
             strokeWidth="1.5"
           >
-            <title>{`${arc.name}: ${formatUserCurrency(arc.value, currency)}`}</title>
+            <title>{`${arc.name}: ${formatValue(arc.value)}`}</title>
           </path>
         ))}
         {innerText && (

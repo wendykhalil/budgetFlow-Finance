@@ -1,17 +1,25 @@
-import Icon from './Icon.jsx'
+import Icon from "./Icon.jsx"
 
-export function DateFilter({ value = 'this-month', onChange, className = '', label = 'Date range' }) {
+export function DateFilter({
+  value = "this-month",
+  onChange,
+  className = "",
+  label = "Date range",
+}) {
   const options = [
-    { value: 'this-month', label: 'This Month' },
-    { value: 'last-month', label: 'Last Month' },
-    { value: 'this-year', label: 'This Year' },
-    { value: 'last-year', label: 'Last Year' },
-    { value: 'custom', label: 'Custom Range' },
+    { value: "this-month", label: "This Month" },
+    { value: "last-month", label: "Last Month" },
+    { value: "this-year", label: "This Year" },
+    { value: "last-year", label: "Last Year" },
+    { value: "custom", label: "Custom Range" },
   ]
 
   return (
     <div className={`relative ${className}`}>
-      <Icon name="calendar" className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
+      <Icon
+        name="calendar"
+        className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400"
+      />
       <select
         value={value}
         onChange={(e) => onChange?.(e.target.value)}

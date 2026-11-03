@@ -1,16 +1,19 @@
-import Icon from './Icon.jsx'
+import Icon from "./Icon.jsx"
 
 export function SearchInput({
-  placeholder = 'Search...',
+  placeholder = "Search...",
   value,
   onChange,
-  className = '',
+  className = "",
   label,
-  'aria-label': ariaLabel,
+  "aria-label": ariaLabel,
 }) {
   return (
     <div className={`relative ${className}`}>
-      <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
+      <Icon
+        name="search"
+        className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400"
+      />
       <input
         type="text"
         value={value}

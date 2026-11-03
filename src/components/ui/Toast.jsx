@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import Icon from './Icon.jsx'
+import { useState, useEffect, useCallback, useRef } from "react"
+import Icon from "./Icon.jsx"
 
-export function Toast({ message, type = 'success', duration = 2500, onClose }) {
+export function Toast({ message, type = "success", duration = 2500, onClose }) {
   const [visible, setVisible] = useState(true)
 
   useEffect(() => {
@@ -15,10 +15,14 @@ export function Toast({ message, type = 'success', duration = 2500, onClose }) {
   if (!visible) return null
 
   const typeConfig = {
-    success: { bg: 'bg-slate-900', icon: 'check', iconBg: 'bg-emerald-500' },
-    error: { bg: 'bg-rose-900', icon: 'x-circle', iconBg: 'bg-rose-500' },
-    info: { bg: 'bg-slate-900', icon: 'alert-triangle', iconBg: 'bg-blue-500' },
-    warning: { bg: 'bg-amber-900', icon: 'alert-triangle', iconBg: 'bg-amber-500' },
+    success: { bg: "bg-slate-900", icon: "check", iconBg: "bg-emerald-500" },
+    error: { bg: "bg-rose-900", icon: "x-circle", iconBg: "bg-rose-500" },
+    info: { bg: "bg-slate-900", icon: "alert-triangle", iconBg: "bg-blue-500" },
+    warning: {
+      bg: "bg-amber-900",
+      icon: "alert-triangle",
+      iconBg: "bg-amber-500",
+    },
   }
 
   const config = typeConfig[type] || typeConfig.success
@@ -36,17 +40,31 @@ export function Toast({ message, type = 'success', duration = 2500, onClose }) {
 }
 
 export function useToast() {
-  const [toast, setToast] = useState({ message: '', type: 'success', visible: false })
+  const [toast, setToast] = useState({
+    message: "",
+    type: "success",
+    visible: false,
+  })
   const toastIdRef = useRef(0)
 
-  const showToast = useCallback((message, type = 'success', duration = 2500) => {
-    setToast({ id: ++toastIdRef.current, message, type, visible: true, duration })
-  }, [])
+  const showToast = useCallback(
+    (message, type = "success", duration = 2500) => {
+      setToast({
+        id: ++toastIdRef.current,
+        message,
+        type,
+        visible: true,
+        duration,
+      })
+    },
+    [],
+  )
 
   const hideToast = useCallback(() => {
-    setToast((current) => current.visible
-      ? { ...current, message: '', visible: false, duration: 0 }
-      : current,
+    setToast((current) =>
+      current.visible
+        ? { ...current, message: "", visible: false, duration: 0 }
+        : current,
     )
   }, [])
 

@@ -1,40 +1,45 @@
-import { useState, useEffect, useId, useRef } from 'react'
-import Icon from './Icon.jsx'
+import { useState, useEffect, useId, useRef } from "react"
+import Icon from "./Icon.jsx"
 
-export function Dropdown({ trigger, items, placement = 'bottom-right', label = 'More options' }) {
+export function Dropdown({
+  trigger,
+  items,
+  placement = "bottom-right",
+  label = "More options",
+}) {
   const [open, setOpen] = useState(false)
   const menuId = useId()
   const triggerRef = useRef(null)
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (open && !e.target?.closest('[data-dropdown]')) {
+      if (open && !e.target?.closest("[data-dropdown]")) {
         setOpen(false)
       }
     }
-    document.addEventListener('click', handleClickOutside)
-    return () => document.removeEventListener('click', handleClickOutside)
+    document.addEventListener("click", handleClickOutside)
+    return () => document.removeEventListener("click", handleClickOutside)
   }, [open])
 
   useEffect(() => {
     if (!open) return
 
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         setOpen(false)
         triggerRef.current?.focus()
       }
     }
 
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
   }, [open])
 
   const placements = {
-    'top-right': 'bottom-full right-0 mb-2',
-    'top-left': 'bottom-full left-0 mb-2',
-    'bottom-right': 'top-full right-0 mt-2',
-    'bottom-left': 'top-full left-0 mt-2',
+    "top-right": "bottom-full right-0 mb-2",
+    "top-left": "bottom-full left-0 mb-2",
+    "bottom-right": "top-full right-0 mt-2",
+    "bottom-left": "top-full left-0 mt-2",
   }
 
   return (
@@ -63,7 +68,9 @@ export function Dropdown({ trigger, items, placement = 'bottom-right', label = '
               item.onClick?.()
               setOpen(false)
             }}
-            className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 ${item.danger ? 'text-rose-600 hover:bg-rose-50' : ''}`}
+            className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 ${
+              item.danger ? "text-rose-600 hover:bg-rose-50" : ""
+            }`}
           >
             {item.icon && <Icon name={item.icon} className="size-4" />}
             {item.label}

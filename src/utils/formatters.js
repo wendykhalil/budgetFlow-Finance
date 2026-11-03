@@ -66,7 +66,9 @@ export function formatPercent(value) {
 
   const normalized = Number(safeValue.toFixed(2))
 
-  return `${Number.isInteger(normalized) ? normalized.toFixed(0) : normalized.toString()}%`
+  return `${
+    Number.isInteger(normalized) ? normalized.toFixed(0) : normalized.toString()
+  }%`
 }
 
 export function getBudgetStatus(spent, limit) {

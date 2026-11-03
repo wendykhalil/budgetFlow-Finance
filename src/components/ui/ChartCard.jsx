@@ -1,6 +1,12 @@
-import Card from './Card.jsx'
+import Card from "./Card.jsx"
 
-export function ChartCard({ title, subtitle, right, children, className = '' }) {
+export function ChartCard({
+  title,
+  subtitle,
+  right,
+  children,
+  className = "",
+}) {
   return (
     <Card className={className}>
       <div className="flex items-center justify-between">
