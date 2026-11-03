@@ -4,9 +4,8 @@ const Budget = require("../models/Budget")
 
 const Category = require("../models/Category")
 
-const Transaction = require("../models/Transaction")
-
 const { normalizeCurrency } = require("../utils/currencies")
+const { getBudgetSpending } = require("../utils/budgetSpending")
 
 function isValidAmountForCurrency(amount, currency) {
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
@@ -32,6 +31,15 @@ function getLimitPrecisionMessage(currency) {
   }).resolvedOptions().maximumFractionDigits
 
   return `Limit supports up to ${fractionDigits} decimal places in ${currency}.`
+}
+
+function emitBudgetEvent(req, event, payload) {
+  try {
+    const io = req.app.get("io")
+    if (io) io.to(`user:${req.user.id}`).emit(event, payload)
+  } catch (error) {
+    console.error(`[budgets] Socket.IO emission failed for ${event}.`, error)
+  }
 }
 
 function isValidDate(value) {
@@ -60,37 +68,6 @@ function isValidDate(value) {
   ]
 
   return day >= 1 && day <= daysInMonth[month - 1]
-}
-
-function getMonthStartEnd(dateStr) {
-  if (!isValidDate(dateStr)) return null
-
-  const [year, month] = dateStr.split("-").map(Number)
-
-  const start = `${year}-${month.toString().padStart(2, "0")}-01`
-
-  const isLeapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
-
-  const daysInMonth = [
-    31,
-    isLeapYear ? 29 : 28,
-    31,
-    30,
-    31,
-    30,
-    31,
-    31,
-    30,
-    31,
-    30,
-    31,
-  ]
-
-  const lastDay = daysInMonth[month - 1]
-
-  const end = `${year}-${month.toString().padStart(2, "0")}-${lastDay}`
-
-  return { start, end }
 }
 
 async function listBudgets(req, res, next) {
@@ -159,11 +136,9 @@ async function createBudget(req, res, next) {
     // Category must not be archived
 
     if (category.isArchived) {
-      return res
-        .status(409)
-        .json({
-          message: "Archived categories cannot be used for new budgets.",
-        })
+      return res.status(409).json({
+        message: "Archived categories cannot be used for new budgets.",
+      })
     }
 
     // Period must be monthly
@@ -175,12 +150,10 @@ async function createBudget(req, res, next) {
     // Validate startDate
 
     if (!startDate || !isValidDate(startDate)) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Start date must be a valid date and the first day of its month (YYYY-MM-01).",
-        })
+      return res.status(400).json({
+        message:
+          "Start date must be a valid date and the first day of its month (YYYY-MM-01).",
+      })
     }
 
     // Check that startDate is the first day of the month
@@ -208,11 +181,9 @@ async function createBudget(req, res, next) {
     })
 
     if (existingBudget) {
-      return res
-        .status(409)
-        .json({
-          message: "A budget already exists for this category and month.",
-        })
+      return res.status(409).json({
+        message: "A budget already exists for this category and month.",
+      })
     }
 
     // Create budget
@@ -240,30 +211,18 @@ async function createBudget(req, res, next) {
       "name type color icon isArchived",
     )
 
-    // Emit Socket.IO event
-
-    const io = req.app.get("io")
-
-    if (io) {
-      const eventBudget = createdBudget.toJSON()
-
-      delete eventBudget.userId
-
-      io.to(`user:${req.user.id}`).emit("budget:created", {
-        budget: eventBudget,
-      })
-    }
+    const eventBudget = createdBudget.toJSON()
+    delete eventBudget.userId
+    emitBudgetEvent(req, "budget:created", { budget: eventBudget })
 
     return res.status(201).json({ budget: createdBudget })
   } catch (error) {
     if (error.code === 11000) {
       // Duplicate key error
 
-      return res
-        .status(409)
-        .json({
-          message: "A budget already exists for this category and month.",
-        })
+      return res.status(409).json({
+        message: "A budget already exists for this category and month.",
+      })
     }
 
     return next(error)
@@ -330,19 +289,15 @@ async function updateBudget(req, res, next) {
       }
 
       if (category.type !== "expense") {
-        return res
-          .status(400)
-          .json({
-            message: "Budget can only be created for expense categories.",
-          })
+        return res.status(400).json({
+          message: "Budget can only be created for expense categories.",
+        })
       }
 
       if (category.isArchived) {
-        return res
-          .status(409)
-          .json({
-            message: "Archived categories cannot be used for new budgets.",
-          })
+        return res.status(409).json({
+          message: "Archived categories cannot be used for new budgets.",
+        })
       }
 
       // Check for existing budget with new category and same month
@@ -364,11 +319,9 @@ async function updateBudget(req, res, next) {
       })
 
       if (existingBudget) {
-        return res
-          .status(409)
-          .json({
-            message: "A budget already exists for this category and month.",
-          })
+        return res.status(409).json({
+          message: "A budget already exists for this category and month.",
+        })
       }
 
       budget.categoryId = categoryId
@@ -407,12 +360,10 @@ async function updateBudget(req, res, next) {
 
     if (startDate !== undefined) {
       if (!isValidDate(startDate)) {
-        return res
-          .status(400)
-          .json({
-            message:
-              "Start date must be a valid date and the first day of its month (YYYY-MM-01).",
-          })
+        return res.status(400).json({
+          message:
+            "Start date must be a valid date and the first day of its month (YYYY-MM-01).",
+        })
       }
 
       const [y, m, dd] = startDate.split("-").map(Number)
@@ -442,28 +393,16 @@ async function updateBudget(req, res, next) {
 
     await budget.populate("categoryId", "name type color icon isArchived")
 
-    // Emit Socket.IO event
-
-    const io = req.app.get("io")
-
-    if (io) {
-      const eventBudget = budget.toJSON()
-
-      delete eventBudget.userId
-
-      io.to(`user:${req.user.id}`).emit("budget:updated", {
-        budget: eventBudget,
-      })
-    }
+    const eventBudget = budget.toJSON()
+    delete eventBudget.userId
+    emitBudgetEvent(req, "budget:updated", { budget: eventBudget })
 
     return res.status(200).json({ budget })
   } catch (error) {
     if (error.code === 11000) {
-      return res
-        .status(409)
-        .json({
-          message: "A budget already exists for this category and month.",
-        })
+      return res.status(409).json({
+        message: "A budget already exists for this category and month.",
+      })
     }
 
     return next(error)
@@ -488,13 +427,7 @@ async function deleteBudget(req, res, next) {
       return res.status(404).json({ message: "Budget not found." })
     }
 
-    // Emit Socket.IO event
-
-    const io = req.app.get("io")
-
-    if (io) {
-      io.to(`user:${req.user.id}`).emit("budget:deleted", { budgetId: id })
-    }
+    emitBudgetEvent(req, "budget:deleted", { budgetId: id })
 
     return res.status(200).json({ message: "Budget deleted." })
   } catch (error) {
@@ -516,71 +449,8 @@ async function getBudgetSpent(req, res, next) {
       return res.status(404).json({ message: "Budget not found." })
     }
 
-    const { start, end } = getMonthStartEnd(budget.startDate)
-
-    if (!start || !end) {
-      return res.status(400).json({ message: "Invalid budget start date." })
-    }
-
-    // Calculate spent using aggregation
-
-    const spentResult = await Transaction.aggregate([
-      {
-        $match: {
-          userId: budget.userId,
-
-          categoryId: budget.categoryId,
-
-          type: "expense",
-
-          status: "completed",
-
-          date: { $gte: start, $lte: end },
-        },
-      },
-
-      {
-        $group: {
-          _id: null,
-
-          total: { $sum: "$amount" },
-        },
-      },
-    ])
-
-    const spent = spentResult.length > 0 ? spentResult[0].total : 0
-
-    const limit = budget.limit
-
-    const remaining = Math.max(0, limit - spent)
-
-    const percentUsed = limit > 0 ? (spent / limit) * 100 : 0
-
-    let status
-
-    if (percentUsed >= 100) {
-      status = "exceeded"
-    } else if (percentUsed >= 85) {
-      status = "warning"
-    } else {
-      status = "healthy"
-    }
-
-    return res.status(200).json({
-      spent,
-
-      limit,
-
-      remaining,
-
-      percentUsed,
-
-      status,
-
-      periodStart: start,
-
-      periodEnd: end,
-    })
+    const spending = await getBudgetSpending(budget)
+    return res.status(200).json(spending)
   } catch (error) {
     return next(error)
   }

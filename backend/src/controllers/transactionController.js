@@ -5,6 +5,11 @@ const Category = require("../models/Category")
 const Transaction = require("../models/Transaction")
 
 const { normalizeCurrency } = require("../utils/currencies")
+const {
+  createNotificationBestEffort,
+  createTransactionNotificationData,
+  processBudgetAlertsForTransactions,
+} = require("../services/notificationService")
 
 const transactionFields = [
   "date",
@@ -27,17 +32,53 @@ const transactionFields = [
 ]
 
 function emitTransactionEvent(req, event, transaction) {
+  try {
+    const io = req.app.get("io")
+    if (!io) return
+
+    const eventTransaction = transaction.toJSON()
+    delete eventTransaction.userId
+
+    io.to(`user:${transaction.userId.toString()}`).emit(event, {
+      transaction: eventTransaction,
+    })
+  } catch (error) {
+    console.error(
+      `[transactions] Socket.IO emission failed for ${event}.`,
+      error,
+    )
+  }
+}
+
+async function notifyTransactionChange(
+  req,
+  type,
+  transaction,
+  affectedTransactions,
+) {
   const io = req.app.get("io")
+  try {
+    const notification = createTransactionNotificationData(
+      transaction,
+      type,
+      normalizeCurrency(req.user.currency),
+    )
+    await createNotificationBestEffort(notification, io)
+  } catch (error) {
+    console.error(
+      "[notifications] Transaction notification preparation failed.",
+      error,
+    )
+  }
 
-  if (!io) return
-
-  const eventTransaction = transaction.toJSON()
-
-  delete eventTransaction.userId
-
-  io.to(`user:${transaction.userId.toString()}`).emit(event, {
-    transaction: eventTransaction,
-  })
+  try {
+    await processBudgetAlertsForTransactions(affectedTransactions, io)
+  } catch (error) {
+    console.error(
+      "[notifications] Transaction budget alert processing failed.",
+      error,
+    )
+  }
 }
 
 function isValidDate(value) {
@@ -243,6 +284,9 @@ async function createTransaction(req, res, next) {
     })
 
     emitTransactionEvent(req, "transaction:created", transaction)
+    await notifyTransactionChange(req, "transaction_created", transaction, [
+      transaction,
+    ])
 
     return res.status(201).json({ transaction })
   } catch (error) {
@@ -374,6 +418,10 @@ async function updateTransaction(req, res, next) {
     }
 
     emitTransactionEvent(req, "transaction:updated", transaction)
+    await notifyTransactionChange(req, "transaction_updated", transaction, [
+      currentTransaction,
+      transaction,
+    ])
 
     return res.status(200).json({ transaction })
   } catch (error) {
@@ -397,16 +445,26 @@ async function deleteTransaction(req, res, next) {
       return res.status(404).json({ message: "Transaction not found." })
     }
 
-    const io = req.app.get("io")
-
-    if (io) {
-      io.to(`user:${transaction.userId.toString()}`).emit(
-        "transaction:deleted",
-        {
-          id: transaction.id,
-        },
+    try {
+      const io = req.app.get("io")
+      if (io) {
+        io.to(`user:${transaction.userId.toString()}`).emit(
+          "transaction:deleted",
+          {
+            id: transaction.id,
+          },
+        )
+      }
+    } catch (error) {
+      console.error(
+        "[transactions] Socket.IO emission failed for transaction:deleted.",
+        error,
       )
     }
+
+    await notifyTransactionChange(req, "transaction_deleted", transaction, [
+      transaction,
+    ])
 
     return res.status(200).json({ message: "Transaction deleted." })
   } catch (error) {
