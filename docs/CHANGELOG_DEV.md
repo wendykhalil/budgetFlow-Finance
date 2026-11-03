@@ -1,3 +1,157 @@
+# 2026-11-03 — P1.5.10 Improve MongoDB Connection Error Diagnostics
+
+### Objective
+Enhance MongoDB connection error logging to improve diagnostics while maintaining security by never exposing connection strings or credentials.
+
+### Summary
+**Error Diagnostics**: ✅ IMPROVED
+- Enhanced error logging with safe, redacted error messages
+- Connection strings are never logged, even in error messages
+- Error codes are captured for additional diagnostic context
+- User-facing error messages remain generic and secure
+- All existing behavior preserved
+
+### Files Modified
+
+1. **`backend/src/config/database.js`**
+   - Added enhanced error handling in `connectDB()` catch block
+   - Implemented connection string redaction using regex patterns
+   - Logs error message (with credentials redacted) using `console.error`
+   - Logs error code if available for diagnostics
+   - Preserves generic user-facing error message
+   - Maintains existing `isDatabaseConnected()` behavior
+
+### Implementation Details
+
+**Error Handling Enhancement**:
+```javascript
+catch (error) {
+  // Log the original error safely for diagnostics (never log connection strings)
+  let errorMessage = error.message || error.toString()
+  
+  // Remove common MongoDB connection string patterns to avoid logging credentials
+  errorMessage = errorMessage.replace(
+    /mongodb(\+srv)?:\/\/[^\s/]+@[^\s/]+\/[^\s/]*/g,
+    "mongodb://[redacted]",
+  )
+  errorMessage = errorMessage.replace(
+    /mongodb(\+srv)?:\/\/[^\s]*/g,
+    "mongodb://[redacted]",
+  )
+
+  console.error("MongoDB connection failed:", errorMessage)
+  if (error.code) {
+    console.error("Error code:", error.code)
+  }
+
+  throw new Error(
+    "MongoDB connection failed. Check MONGODB_URI and database availability.",
+  )
+}
+```
+
+**Security Features**:
+- ✅ Regex redaction removes both `mongodb://` and `mongodb+srv://` URIs
+- ✅ Handles URIs with credentials: `mongodb://user:password@host/db`
+- ✅ Handles URIs without credentials: `mongodb://host/db`
+- ✅ Redacts entire connection string if present in error message
+- ✅ User-facing error message never includes technical details
+
+**Diagnostics Improvements**:
+- Error message is logged (with credentials redacted) for operators
+- Error code is logged (e.g., ENOTFOUND, ECONNREFUSED) for troubleshooting
+- Connection string itself is never logged at any point
+- Error can be traced in logs without exposing secrets
+
+### Test Results
+
+✅ **Environment Tests**: 7/7 PASS
+- `uses safe development defaults and does not require production settings in tests` ✓
+- `rejects unknown environments and invalid ports` ✓
+- `requires a JWT secret, MongoDB URI, and allowed origins in production` ✓
+- `rejects weak or placeholder production JWT secrets without exposing them` ✓
+- `rejects empty FRONTEND_ORIGINS in production (prevents allow-all CORS)` ✓
+- `normalizes configured origins and rejects non-origin URLs` ✓
+- **`does not expose MongoDB credentials in connection errors or logs`** ✓ (Critical test)
+
+✅ **Health Tests**: 1/1 PASS
+- `API health, readiness, errors, and CORS` ✓
+
+✅ **MongoDB Readiness Tests**: 8/8 PASS
+- `GET /api/health returns 200 regardless of MongoDB state` ✓
+- `GET /api/ready returns 503 when MongoDB is disconnected` ✓
+- `GET /api/ready returns 200 when MongoDB is connected` ✓
+- `Server starts and responds to health check` ✓
+- `Server stops cleanly and closes port` ✓
+- `Server handles MongoDB unavailable at startup` ✓
+- `Connection state transitions are properly reflected` ✓
+- `Readiness endpoint returns proper JSON structure` ✓
+
+**Total Backend Tests**: 16/16 PASS (100%)
+
+### Verification
+
+✅ **Security Verification**:
+- No connection strings exposed in error messages
+- No credentials logged at any point
+- Error redaction handles all common MongoDB URI formats
+- User-facing error message is generic and safe
+
+✅ **Behavior Verification**:
+- `connectDB()` function behavior unchanged
+- `isDatabaseConnected()` function behavior unchanged
+- Error throwing behavior unchanged
+- All existing tests still pass
+
+✅ **Diagnostics Verification**:
+- Original error message logged (with redaction)
+- Error codes captured and logged
+- Operators can troubleshoot connection issues using logs
+- No security risks in diagnostic output
+
+### Impact Analysis
+
+- **Breaking Changes**: None
+- **Backwards Compatibility**: ✅ 100% compatible
+- **Performance Impact**: Negligible (regex only runs on error path)
+- **Security Impact**: ✅ Improved (never logs credentials)
+- **Diagnostic Value**: ✅ Improved (logs error codes and messages)
+
+### Example Error Logs
+
+**Before** (no diagnostics):
+```
+// No error output to operators
+```
+
+**After** (with diagnostics):
+```
+MongoDB connection failed: getaddrinfo ENOTFOUND db.example.invalid
+Error code: ENOTFOUND
+```
+
+**With URI in error message (redacted safely)**:
+```
+MongoDB connection failed: Sensitive connection detail: mongodb://[redacted]
+Error code: ECONNREFUSED
+```
+
+### Remaining Limitations
+
+- None identified
+- Error diagnostics are now complete and secure
+
+### Next Steps
+
+1. **Deployment**: Ready for production
+2. **Monitoring**: Operators can now use error logs for diagnostics
+3. **Related Tasks**: Consider similar improvements for other database operations
+
+### Status
+✅ **COMPLETE** — MongoDB connection error diagnostics improved with full security.
+
+---
+
 # 2026-11-03 — P1.5.9 Calendar Transaction Indicators and Currency Conversion Audit
 
 ### Objective
