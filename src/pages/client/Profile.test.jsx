@@ -13,33 +13,27 @@ import { useTransactions } from "@/contexts/TransactionContext"
 import ClientProfile from "@/pages/client/Profile"
 
 const updateCurrency = vi.fn()
+const updateProfile = vi.fn()
 
 function renderProfile(transactionState = {}) {
   useAuth.mockReturnValue({
     user: {
       id: "user-1",
-
       firstName: "Alex",
-
       lastName: "Martin",
-
       email: "alex@example.test",
-
       currency: "EUR",
+      phone: "+33123456789",
+      country: "France",
     },
-
-    updateProfile: vi.fn(),
-
+    updateProfile,
     updateCurrency,
   })
 
   useTransactions.mockReturnValue({
     transactions: [],
-
     loading: false,
-
     error: "",
-
     ...transactionState,
   })
 
@@ -48,6 +42,7 @@ function renderProfile(transactionState = {}) {
 
 beforeEach(() => {
   updateCurrency.mockReset()
+  updateProfile.mockReset()
 })
 
 describe("Profile currency preference", () => {
@@ -93,5 +88,29 @@ describe("Profile currency preference", () => {
     expect(selector.value).toBe("EUR")
 
     expect(screen.queryByText("Account currency updated.")).toBeNull()
+  })
+})
+
+describe("Profile persistence", () => {
+  it("calls updateProfile API when save button clicked", async () => {
+    updateProfile.mockResolvedValue({ id: "user-1" })
+
+    renderProfile()
+
+    const saveButtons = screen.getAllByText("Save profile")
+    fireEvent.click(saveButtons[0])
+
+    await waitFor(() => {
+      expect(updateProfile).toHaveBeenCalledWith({
+        firstName: "Alex",
+        lastName: "Martin",
+        phone: "+33123456789",
+        country: "France",
+      })
+    })
+
+    expect(
+      await screen.findByText("Profile updated successfully."),
+    ).toBeTruthy()
   })
 })

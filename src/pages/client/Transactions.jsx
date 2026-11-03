@@ -184,7 +184,7 @@ export function ClientTransactions() {
 
   const [categoryFilter, setCategoryFilter] = useState("all")
 
-  const [dateFilter, setDateFilter] = useState("this-month")
+  const [dateFilter, setDateFilter] = useState("this-year")
 
   const [currentPage, setCurrentPage] = useState(1)
 

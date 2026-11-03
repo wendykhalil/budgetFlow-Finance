@@ -1,39 +1,39 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
-import Landing from '@/pages/auth/Landing'
-import Login from '@/pages/auth/Login'
-import Register from '@/pages/auth/Register'
-import ForgotPassword from '@/pages/auth/ForgotPassword'
-import ResetPassword from '@/pages/auth/ResetPassword'
-import Unauthorized from '@/pages/auth/Unauthorized'
-import NotFound from '@/pages/auth/NotFound'
+import { Routes, Route, Navigate } from "react-router-dom"
+import Landing from "@/pages/auth/Landing"
+import Login from "@/pages/auth/Login"
+import Register from "@/pages/auth/Register"
+import ForgotPassword from "@/pages/auth/ForgotPassword"
+import ResetPassword from "@/pages/auth/ResetPassword"
+import Unauthorized from "@/pages/auth/Unauthorized"
+import NotFound from "@/pages/auth/NotFound"
 
-import ClientLayout from '@/layouts/ClientLayout'
-import AdminLayout from '@/layouts/AdminLayout'
-import AuthLayout from '@/layouts/AuthLayout'
+import ClientLayout from "@/layouts/ClientLayout"
+import AdminLayout from "@/layouts/AdminLayout"
+import AuthLayout from "@/layouts/AuthLayout"
 
-import ClientDashboard from '@/pages/client/Dashboard'
-import ClientTransactions from '@/pages/client/Transactions'
-import ClientTransactionNew from '@/pages/client/TransactionNew'
-import ClientTransactionDetails from '@/pages/client/TransactionDetails'
-import ClientBudgets from '@/pages/client/Budgets'
-import ClientBudgetNew from '@/pages/client/BudgetNew'
-import ClientBudgetDetails from '@/pages/client/BudgetDetails'
-import ClientCategories from '@/pages/client/Categories'
-import ClientAnalytics from '@/pages/client/Analytics'
-import ClientCalendar from '@/pages/client/Calendar'
-import ClientNotifications from '@/pages/client/Notifications'
-import ClientProfile from '@/pages/client/Profile'
-import ClientSettings from '@/pages/client/Settings'
+import ClientDashboard from "@/pages/client/Dashboard"
+import ClientTransactions from "@/pages/client/Transactions"
+import ClientTransactionNew from "@/pages/client/TransactionNew"
+import ClientTransactionDetails from "@/pages/client/TransactionDetails"
+import ClientBudgets from "@/pages/client/Budgets"
+import ClientBudgetNew from "@/pages/client/BudgetNew"
+import ClientBudgetDetails from "@/pages/client/BudgetDetails"
+import ClientCategories from "@/pages/client/Categories"
+import ClientAnalytics from "@/pages/client/Analytics"
+import ClientCalendar from "@/pages/client/Calendar"
+import ClientNotifications from "@/pages/client/Notifications"
+import ClientProfile from "@/pages/client/Profile"
+import ClientSettings from "@/pages/client/Settings"
 
-import AdminDashboard from '@/pages/admin/Dashboard'
-import AdminUsers from '@/pages/admin/Users'
-import AdminUserDetail from '@/pages/admin/UserDetail'
-import AdminTransactions from '@/pages/admin/Transactions'
-import AdminCategories from '@/pages/admin/Categories'
-import AdminBudgets from '@/pages/admin/Budgets'
-import AdminReports from '@/pages/admin/Reports'
-import AdminActivityLogs from '@/pages/admin/ActivityLogs'
-import AdminSettings from '@/pages/admin/Settings'
+import AdminDashboard from "@/pages/admin/Dashboard"
+import AdminUsers from "@/pages/admin/Users"
+import AdminUserDetail from "@/pages/admin/UserDetail"
+import AdminTransactions from "@/pages/admin/Transactions"
+import AdminCategories from "@/pages/admin/Categories"
+import AdminBudgets from "@/pages/admin/Budgets"
+import AdminReports from "@/pages/admin/Reports"
+import AdminActivityLogs from "@/pages/admin/ActivityLogs"
+import AdminSettings from "@/pages/admin/Settings"
 
 function App() {
   return (
@@ -54,9 +54,18 @@ function App() {
       <Route element={<ClientLayout />}>
         <Route path="/client/dashboard" element={<ClientDashboard />} />
         <Route path="/client/transactions" element={<ClientTransactions />} />
-        <Route path="/client/transactions/new" element={<ClientTransactionNew />} />
-        <Route path="/client/transactions/:id" element={<ClientTransactionDetails />} />
-        <Route path="/client/transactions/:id/edit" element={<ClientTransactionNew />} />
+        <Route
+          path="/client/transactions/new"
+          element={<ClientTransactionNew />}
+        />
+        <Route
+          path="/client/transactions/:id"
+          element={<ClientTransactionDetails />}
+        />
+        <Route
+          path="/client/transactions/:id/edit"
+          element={<ClientTransactionNew />}
+        />
         <Route path="/client/budgets" element={<ClientBudgets />} />
         <Route path="/client/budgets/new" element={<ClientBudgetNew />} />
         <Route path="/client/budgets/:id" element={<ClientBudgetDetails />} />

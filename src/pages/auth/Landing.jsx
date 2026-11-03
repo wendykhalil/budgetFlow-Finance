@@ -1,8 +1,8 @@
-import { useNavigate } from 'react-router-dom'
-import Logo from '@/components/layout/Logo'
-import Button from '@/components/ui/Button'
-import Badge from '@/components/ui/Badge'
-import Icon from '@/components/ui/Icon'
+import { useNavigate } from "react-router-dom"
+import Logo from "@/components/layout/Logo"
+import Button from "@/components/ui/Button"
+import Badge from "@/components/ui/Badge"
+import Icon from "@/components/ui/Icon"
 
 export function Landing() {
   const navigate = useNavigate()
@@ -17,10 +17,10 @@ export function Landing() {
           <span>Security</span>
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={() => navigate('/login')}>
+          <Button variant="ghost" onClick={() => navigate("/login")}>
             Log in
           </Button>
-          <Button onClick={() => navigate('/login')}>Get started</Button>
+          <Button onClick={() => navigate("/login")}>Get started</Button>
         </div>
       </nav>
 
@@ -31,24 +31,28 @@ export function Landing() {
             Take control of your money.
           </div>
           <p className="mt-6 max-w-xl text-lg leading-8 text-slate-600">
-            Track income, understand spending, and build budgets that fit your life—all
-            in one beautifully simple workspace.
+            Track income, understand spending, and build budgets that fit your
+            life—all in one beautifully simple workspace.
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
-            <Button onClick={() => navigate('/login')} className="px-6 py-3.5">
+            <Button onClick={() => navigate("/login")} className="px-6 py-3.5">
               Start for free <Icon name="arrow" className="size-4" />
             </Button>
-            <Button variant="secondary" onClick={() => navigate('/login')} className="px-6 py-3.5">
+            <Button
+              variant="secondary"
+              onClick={() => navigate("/login")}
+              className="px-6 py-3.5"
+            >
               View demo
             </Button>
           </div>
           <div className="mt-8 flex items-center gap-3 text-sm text-slate-500">
             <div className="flex -space-x-2">
-              {['AM', 'SW', 'JS'].map((x, i) => (
+              {["AM", "SW", "JS"].map((x, i) => (
                 <span
                   key={x}
                   className={`grid size-8 place-items-center rounded-full border-2 border-white text-[10px] font-bold ${
-                    ['bg-amber-100', 'bg-rose-100', 'bg-blue-100'][i]
+                    ["bg-amber-100", "bg-rose-100", "bg-blue-100"][i]
                   }`}
                 >
                   {x}
@@ -65,15 +69,21 @@ export function Landing() {
         <div className="mx-auto grid max-w-6xl grid-cols-3 py-10 text-center">
           <div>
             <b className="text-2xl md:text-3xl">10,000+</b>
-            <span className="block text-xs text-slate-500 md:text-sm">transactions tracked</span>
+            <span className="block text-xs text-slate-500 md:text-sm">
+              transactions tracked
+            </span>
           </div>
           <div>
             <b className="text-2xl md:text-3xl">2,500+</b>
-            <span className="block text-xs text-slate-500 md:text-sm">active users</span>
+            <span className="block text-xs text-slate-500 md:text-sm">
+              active users
+            </span>
           </div>
           <div>
             <b className="text-2xl md:text-3xl">€1.2M</b>
-            <span className="block text-xs text-slate-500 md:text-sm">expenses analyzed</span>
+            <span className="block text-xs text-slate-500 md:text-sm">
+              expenses analyzed
+            </span>
           </div>
         </div>
       </section>
@@ -84,14 +94,41 @@ export function Landing() {
         </div>
         <div className="mt-10 grid gap-5 md:grid-cols-3">
           {[
-            ['card', 'Expense tracking', 'See exactly where your money goes, without the spreadsheets.'],
-            ['wallet', 'Smart budgets', 'Set flexible limits and get a heads-up before you overspend.'],
-            ['chart', 'Financial analytics', 'Turn everyday transactions into clear, useful insights.'],
-            ['activity', 'Income management', 'Keep every income stream organized in one place.'],
-            ['calendar', 'Transaction history', 'Search and review your complete financial timeline.'],
-            ['tag', 'Categories', 'Organize spending with categories that fit your life.'],
+            [
+              "card",
+              "Expense tracking",
+              "See exactly where your money goes, without the spreadsheets.",
+            ],
+            [
+              "wallet",
+              "Smart budgets",
+              "Set flexible limits and get a heads-up before you overspend.",
+            ],
+            [
+              "chart",
+              "Financial analytics",
+              "Turn everyday transactions into clear, useful insights.",
+            ],
+            [
+              "activity",
+              "Income management",
+              "Keep every income stream organized in one place.",
+            ],
+            [
+              "calendar",
+              "Transaction history",
+              "Search and review your complete financial timeline.",
+            ],
+            [
+              "tag",
+              "Categories",
+              "Organize spending with categories that fit your life.",
+            ],
           ].map(([i, t, d]) => (
-            <div key={t} className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+            <div
+              key={t}
+              className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm"
+            >
               <div className="grid size-11 place-items-center rounded-xl bg-emerald-50 text-[#155C4F]">
                 <Icon name={i} />
               </div>
@@ -139,9 +176,9 @@ function DashboardPreview() {
         </div>
         <div className="grid grid-cols-3 gap-2">
           {[
-            ['Income', '€3,850', 'text-emerald-600'],
-            ['Expenses', '€2,140', 'text-rose-500'],
-            ['Savings', '€1,709', 'text-blue-600'],
+            ["Income", "€3,850", "text-emerald-600"],
+            ["Expenses", "€2,140", "text-rose-500"],
+            ["Savings", "€1,709", "text-blue-600"],
           ].map(([l, v, c]) => (
             <div key={l} className="rounded-xl bg-slate-50 p-3">
               <div className="text-[10px] text-slate-400">{l}</div>

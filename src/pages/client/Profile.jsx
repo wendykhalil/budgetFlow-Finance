@@ -25,6 +25,7 @@ export function ClientProfile() {
   const [country, setCountry] = useState(user?.country || "")
   const [showToast, setShowToast] = useState(false)
   const [saveError, setSaveError] = useState("")
+  const [profileSaving, setProfileSaving] = useState(false)
   const [currencyError, setCurrencyError] = useState("")
   const [currencySaving, setCurrencySaving] = useState(false)
   const [currencySaved, setCurrencySaved] = useState(false)
@@ -50,20 +51,27 @@ export function ClientProfile() {
     }
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!firstName.trim() || !lastName.trim()) {
       setSaveError("First name and last name are required.")
       return
     }
     setSaveError("")
-    updateProfile({
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      phone,
-      country,
-    })
-    setShowToast(true)
-    setTimeout(() => setShowToast(false), 2500)
+    setProfileSaving(true)
+    try {
+      await updateProfile({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        phone,
+        country,
+      })
+      setShowToast(true)
+      setTimeout(() => setShowToast(false), 2500)
+    } catch (error) {
+      setSaveError(error.message || "Could not save your profile.")
+    } finally {
+      setProfileSaving(false)
+    }
   }
 
   return (
@@ -95,11 +103,13 @@ export function ClientProfile() {
               label="First name"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
+              disabled={profileSaving}
             />
             <Input
               label="Last name"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
+              disabled={profileSaving}
             />
             <Input
               label="Email"
@@ -113,6 +123,7 @@ export function ClientProfile() {
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+              disabled={profileSaving}
             />
             <div>
               <label
@@ -164,6 +175,7 @@ export function ClientProfile() {
               label="Country"
               value={country}
               onChange={(e) => setCountry(e.target.value)}
+              disabled={profileSaving}
             />
           </div>
 
@@ -180,7 +192,9 @@ export function ClientProfile() {
             >
               Password change unavailable
             </Button>
-            <Button onClick={handleSave}>Save profile</Button>
+            <Button onClick={handleSave} disabled={profileSaving}>
+              {profileSaving ? "Saving..." : "Save profile"}
+            </Button>
           </div>
         </Card>
       </div>
@@ -190,7 +204,7 @@ export function ClientProfile() {
           <span className="grid size-6 place-items-center rounded-full bg-emerald-500">
             <Icon name="check" className="size-4" />
           </span>
-          Profile updated for this session. Changes reset after refresh.
+          Profile updated successfully.
         </div>
       )}
     </>

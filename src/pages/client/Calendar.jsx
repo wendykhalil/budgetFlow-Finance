@@ -1,47 +1,116 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useAuth } from "@/contexts/AuthContext"
+import { useTransactions } from "@/contexts/TransactionContext"
 import PageTitle from "@/components/layout/PageTitle"
 import Button from "@/components/ui/Button"
 import Card from "@/components/ui/Card"
-import { transactions } from "@/data/mockTransactions"
+import Alert from "@/components/ui/Alert"
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton"
 import { formatSignedCurrency } from "@/utils/formatters"
-import { formatCalendarDate } from "@/utils/calendarDates"
+import { formatCalendarDate, getLocalDateString } from "@/utils/calendarDates"
 
 export function ClientCalendar() {
   const { user } = useAuth()
   const currency = user?.currency || "EUR"
-  const [displayMonth, setDisplayMonth] = useState(() => new Date(2026, 9, 1))
-  const [selectedDate, setSelectedDate] = useState("2026-10-24")
+  const { transactions = [], loading, error } = useTransactions()
+  const [displayMonth, setDisplayMonth] = useState(() => new Date())
+  const [selectedDate, setSelectedDate] = useState(null)
   const year = displayMonth.getFullYear()
   const month = displayMonth.getMonth()
   const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const startDay = (new Date(year, month, 1).getDay() + 6) % 7
 
+  // Initialize selectedDate on first render
+  useEffect(() => {
+    if (!selectedDate) {
+      setSelectedDate(`${year}-${String(month + 1).padStart(2, "0")}-01`)
+    }
+  }, [])
+
+  // Update selectedDate when displayMonth changes
+  useEffect(() => {
+    if (selectedDate && !selectedDate.startsWith(monthKey)) {
+      setSelectedDate(`${year}-${String(month + 1).padStart(2, "0")}-01`)
+    }
+  }, [monthKey])
+
+  // Build a map of transaction counts by date
+  const transactionsByDate = {}
+  transactions.forEach((transaction) => {
+    if (transaction.date && transaction.date.startsWith(monthKey)) {
+      transactionsByDate[transaction.date] = (transactionsByDate[transaction.date] || 0) + 1
+    }
+  })
+
   const days = []
   for (let i = 0; i < startDay; i++)
     days.push({ day: null, date: `empty-${i}` })
-  for (let i = 1; i <= daysInMonth; i++)
-    days.push({ day: i, date: `${monthKey}-${String(i).padStart(2, "0")}` })
+  for (let i = 1; i <= daysInMonth; i++) {
+    const date = `${monthKey}-${String(i).padStart(2, "0")}`
+    days.push({ day: i, date, transactionCount: transactionsByDate[date] || 0 })
+  }
 
-  const userTransactions = transactions.filter(
-    (transaction) => transaction.userId === user?.id,
-  )
-  const dayTransactions = userTransactions.filter(
-    (transaction) => transaction.date === selectedDate,
-  )
-  const upcomingTransactions = userTransactions.filter(
-    (transaction) =>
-      transaction.status === "pending" &&
-      transaction.date > selectedDate &&
-      transaction.date.startsWith(monthKey),
-  )
+  // Filter transactions for the selected day
+  const dayTransactions = selectedDate
+    ? transactions.filter(
+        (transaction) =>
+          transaction.date === selectedDate &&
+          transaction.status === "completed",
+      )
+    : []
+
+  // Filter upcoming pending transactions in the current month
+  const upcomingTransactions = selectedDate
+    ? transactions
+        .filter(
+          (transaction) =>
+            transaction.status === "pending" &&
+            transaction.date > selectedDate &&
+            transaction.date.startsWith(monthKey),
+        )
+        .sort((a, b) => a.date.localeCompare(b.date))
+    : []
 
   const changeMonth = (amount) => {
     const nextMonth = new Date(year, month + amount, 1)
     setDisplayMonth(nextMonth)
-    setSelectedDate(
-      `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`,
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <>
+        <PageTitle
+          title="Financial calendar"
+          sub="See when money moves in and out of your accounts."
+        />
+        <div className="grid gap-5 lg:grid-cols-[2fr_1fr]">
+          <Card>
+            <LoadingSkeleton height={300} />
+          </Card>
+          <Card>
+            <LoadingSkeleton height={300} />
+          </Card>
+        </div>
+      </>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <>
+        <PageTitle
+          title="Financial calendar"
+          sub="See when money moves in and out of your accounts."
+        />
+        <Alert
+          variant="error"
+          title="Failed to load calendar"
+          description={error}
+        />
+      </>
     )
   }
 
@@ -110,6 +179,17 @@ export function ClientCalendar() {
                   >
                     {d.day}
                   </button>
+                )}
+                {d.day && d.transactionCount > 0 && (
+                  <div className="flex items-center gap-1 text-[10px]">
+                    {d.transactionCount === 1 ? (
+                      <div className="size-1.5 rounded-full bg-slate-400"></div>
+                    ) : (
+                      <span className="inline-flex items-center justify-center size-4 rounded-full bg-slate-200 font-semibold text-slate-600">
+                        {d.transactionCount}
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
             ))}

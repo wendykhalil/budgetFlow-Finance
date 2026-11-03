@@ -6,6 +6,7 @@ import Header from "@/components/layout/Header"
 import TransactionProvider from "@/contexts/TransactionContext"
 import CategoryProvider from "@/contexts/CategoryContext"
 import BudgetProvider from "@/contexts/BudgetContext"
+import NotificationProvider from "@/contexts/NotificationContext"
 
 export function ClientLayout() {
   const { user, loading } = useAuth()
@@ -48,29 +49,31 @@ export function ClientLayout() {
 
   return (
     <div className="min-h-screen min-w-0 bg-[#F4F7F6] text-slate-900">
-      <Sidebar
-        navItems={clientNav}
-        role="client"
-        mobileOpen={mobileMenuOpen}
-        onClose={closeMobileMenu}
-      />
-      <div className="min-w-0 lg:pl-64">
-        <Header
+      <NotificationProvider>
+        <Sidebar
+          navItems={clientNav}
           role="client"
-          mobileMenuOpen={mobileMenuOpen}
-          onToggleMobileMenu={() => setMobileMenuOpen((open) => !open)}
-          menuButtonRef={menuButtonRef}
+          mobileOpen={mobileMenuOpen}
+          onClose={closeMobileMenu}
         />
-        <TransactionProvider>
-          <CategoryProvider>
-            <BudgetProvider>
-              <main className="p-4 md:p-7 lg:p-8">
-                <Outlet />
-              </main>
-            </BudgetProvider>
-          </CategoryProvider>
-        </TransactionProvider>
-      </div>
+        <div className="min-w-0 lg:pl-64">
+          <Header
+            role="client"
+            mobileMenuOpen={mobileMenuOpen}
+            onToggleMobileMenu={() => setMobileMenuOpen((open) => !open)}
+            menuButtonRef={menuButtonRef}
+          />
+          <TransactionProvider>
+            <CategoryProvider>
+              <BudgetProvider>
+                <main className="p-4 md:p-7 lg:p-8">
+                  <Outlet />
+                </main>
+              </BudgetProvider>
+            </CategoryProvider>
+          </TransactionProvider>
+        </div>
+      </NotificationProvider>
     </div>
   )
 }

@@ -1,49 +1,57 @@
 import { useState } from "react"
-import { useAuth } from "@/contexts/AuthContext"
-import PageTitle from "@/components/layout/PageTitle"
+
+import { useNotifications } from "@/contexts/NotificationContext"
+
+import Alert from "@/components/ui/Alert"
+
 import Button from "@/components/ui/Button"
-import Badge from "@/components/ui/Badge"
+
 import Card from "@/components/ui/Card"
+
+import EmptyState from "@/components/ui/EmptyState"
+
 import Icon from "@/components/ui/Icon"
-import { getNotificationsByUser } from "@/data/mockNotifications"
-import { formatUserCurrency } from "@/utils/formatters"
+
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton"
+
+import Pagination from "@/components/ui/Pagination"
+
+import PageTitle from "@/components/layout/PageTitle"
+
+import { ConfirmModal } from "@/components/ui/Modal"
 
 export function ClientNotifications() {
-  const { user } = useAuth()
-  const currency = user?.currency || "EUR"
-  const [notifications, setNotifications] = useState(() =>
-    getNotificationsByUser(user?.id),
-  )
+  const [notificationToDelete, setNotificationToDelete] = useState(null)
 
-  const unreadCount = notifications.filter((n) => n.status === "unread").length
+  const {
+    notifications,
 
-  const markAsRead = (id) => {
-    setNotifications(
-      notifications.map((n) => (n.id === id ? { ...n, status: "read" } : n)),
-    )
-  }
+    unreadCount,
 
-  const markAllAsRead = () => {
-    setNotifications(notifications.map((n) => ({ ...n, status: "read" })))
-  }
+    pagination,
 
-  const deleteNotification = (id) => {
-    setNotifications(notifications.filter((n) => n.id !== id))
-  }
+    loading,
 
-  const getTypeColor = (type) => {
-    switch (type) {
-      case "success":
-        return "bg-emerald-500"
-      case "error":
-        return "bg-rose-500"
-      case "warning":
-        return "bg-amber-500"
-      case "info":
-      default:
-        return "bg-blue-500"
-    }
-  }
+    error,
+
+    actionError,
+
+    readingIds,
+
+    deletingIds,
+
+    markingAllAsRead,
+
+    fetchNotifications,
+
+    refreshNotifications,
+
+    markNotificationAsRead,
+
+    markAllNotificationsAsRead,
+
+    deleteNotification,
+  } = useNotifications()
 
   return (
     <>
@@ -51,98 +59,194 @@ export function ClientNotifications() {
         title="Notifications"
         sub="Updates and insights that help you stay on track."
         action={
-          <div className="flex gap-2">
-            {unreadCount > 0 && (
-              <Button variant="secondary" size="sm" onClick={markAllAsRead}>
-                Mark all as read
-              </Button>
-            )}
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled
-              title="Export is unavailable in this demo"
-            >
-              <Icon name="download" className="size-4" /> Export unavailable
-            </Button>
-          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled
+            title="Export is unavailable in this demo"
+          >
+            <Icon name="download" className="size-4" /> Export unavailable
+          </Button>
         }
       />
 
+      {error && (
+        <div role="alert" className="mb-4">
+          <Alert
+            type="error"
+            title="Could not load notifications"
+            message={error}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mt-3"
+            onClick={() => void refreshNotifications()}
+          >
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {actionError && (
+        <div role="alert" className="mb-4">
+          <Alert
+            type="error"
+            title="Could not update notifications"
+            message={actionError}
+          />
+        </div>
+      )}
+
       {unreadCount > 0 && (
-        <div className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          You have {unreadCount} unread{" "}
-          {unreadCount === 1 ? "notification" : "notifications"}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <span>
+            You have {unreadCount} unread{" "}
+            {unreadCount === 1 ? "notification" : "notifications"}
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={markingAllAsRead}
+            onClick={() => void markAllNotificationsAsRead()}
+          >
+            {markingAllAsRead ? "Marking all as read..." : "Mark all as read"}
+          </Button>
         </div>
       )}
 
       <Card className="divide-y divide-slate-100 p-0">
-        {notifications.length === 0 ? (
-          <div className="py-12 text-center text-sm text-slate-500">
-            No notifications yet.
+        {loading ? (
+          <div className="p-5">
+            <LoadingSkeleton lines={5} />
           </div>
+        ) : notifications.length === 0 ? (
+          <EmptyState
+            title="No notifications yet."
+            message="Updates and budget alerts will appear here."
+            icon={<Icon name="bell" className="size-8" />}
+          />
         ) : (
-          notifications.map((n) => (
+          notifications.map((notification) => (
             <div
-              key={n.id}
+              key={notification.id}
               className={`flex gap-4 border-b border-slate-100 p-5 last:border-0 ${
-                n.status === "unread" ? "bg-emerald-50/20" : ""
+                notification.isRead ? "" : "bg-emerald-50/20"
               }`}
             >
-              <span className="mt-1 size-2 shrink-0 rounded-full bg-slate-300" />
+              <span
+                aria-label={notification.isRead ? "Read" : "Unread"}
+                className={`mt-1 size-2 shrink-0 rounded-full ${getTypeColor(
+                  notification.type,
+                )}`}
+              />
               <div className="flex-1">
-                <div className="font-semibold">
-                  {formatNotificationText(n.title, n.amounts, currency)}
-                </div>
+                <div className="font-semibold">{notification.title}</div>
                 <div className="mt-1 text-sm text-slate-500">
-                  {formatNotificationText(n.message, n.amounts, currency)}
+                  {notification.message}
                 </div>
                 <div className="mt-1 text-xs text-slate-400">
-                  {formatDate(n.date)}
+                  {formatDate(notification.createdAt)}
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {n.status === "unread" && (
-                  <button
-                    onClick={() => markAsRead(n.id)}
-                    className="rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {!notification.isRead && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={readingIds.includes(notification.id)}
+                      onClick={() =>
+                        void markNotificationAsRead(notification.id)
+                      }
+                    >
+                      {readingIds.includes(notification.id)
+                        ? "Marking as read..."
+                        : "Mark as read"}
+                    </Button>
+                  )}
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    disabled={deletingIds.includes(notification.id)}
+                    onClick={() => setNotificationToDelete(notification)}
                   >
-                    Mark as read
-                  </button>
-                )}
-                <button
-                  type="button"
-                  aria-label={`Delete notification: ${n.title}`}
-                  onClick={() => deleteNotification(n.id)}
-                  className="text-slate-400 hover:text-rose-600"
-                >
-                  <Icon name="close" className="size-4" />
-                </button>
+                    <span className="sr-only">
+                      Delete notification: {notification.title}
+                    </span>
+                    {deletingIds.includes(notification.id)
+                      ? "Deleting..."
+                      : "Delete"}
+                  </Button>
+                </div>
               </div>
             </div>
           ))
         )}
       </Card>
+
+      {!loading && pagination.totalPages > 1 && (
+        <div className="mt-4">
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.total}
+            itemsPerPage={pagination.limit}
+            onPageChange={(page) => void fetchNotifications(page)}
+          />
+        </div>
+      )}
+
+      <ConfirmModal
+        isOpen={Boolean(notificationToDelete)}
+        onClose={() => setNotificationToDelete(null)}
+        onConfirm={() => {
+          if (notificationToDelete) {
+            void deleteNotification(notificationToDelete.id)
+          }
+        }}
+        title="Delete notification?"
+        message={`Delete "${notificationToDelete?.title ?? ""}"? This cannot be undone.`}
+        confirmText="Delete"
+        danger
+      />
     </>
   )
 }
 
-function formatNotificationText(text, amounts = {}, currency) {
-  return text.replace(/\{(\w+)\}/g, (placeholder, key) =>
-    Object.prototype.hasOwnProperty.call(amounts, key)
-      ? formatUserCurrency(amounts[key], currency)
-      : placeholder,
-  )
+function getTypeColor(type) {
+  switch (type) {
+    case "budget_warning":
+      return "bg-amber-500"
+
+    case "budget_exceeded":
+
+    case "transaction_deleted":
+      return "bg-rose-500"
+
+    case "transaction_created":
+      return "bg-emerald-500"
+
+    case "transaction_updated":
+
+    default:
+      return "bg-blue-500"
+  }
 }
 
 function formatDate(dateString) {
   const date = new Date(dateString)
+
+  if (Number.isNaN(date.getTime())) return "Date unavailable"
+
   const now = new Date()
+
   const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24))
 
   if (diffDays === 0) return "Today"
+
   if (diffDays === 1) return "Yesterday"
-  if (diffDays < 7) return `${diffDays} days ago`
+
+  if (diffDays > 1 && diffDays < 7) return `${diffDays} days ago`
+
   return date.toLocaleDateString("en-GB", { month: "short", day: "numeric" })
 }
 

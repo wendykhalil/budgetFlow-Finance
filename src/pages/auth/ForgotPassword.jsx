@@ -1,12 +1,12 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import Logo from '@/components/layout/Logo'
-import Button from '@/components/ui/Button'
-import Input from '@/components/ui/Input'
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import Logo from "@/components/layout/Logo"
+import Button from "@/components/ui/Button"
+import Input from "@/components/ui/Input"
 
 export function ForgotPassword() {
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState("")
   const [submitted, setSubmitted] = useState(false)
 
   const handleSubmit = (e) => {
@@ -24,14 +24,18 @@ export function ForgotPassword() {
       </p>
 
       {submitted ? (
-        <div role="status" className="mt-8 rounded-xl bg-emerald-50 p-6 text-center">
+        <div
+          role="status"
+          className="mt-8 rounded-xl bg-emerald-50 p-6 text-center"
+        >
           <div className="mb-4 text-3xl">!</div>
           <h3 className="font-bold text-amber-800">No email was sent</h3>
           <p className="mt-2 text-sm text-amber-700">
-            Password reset requires a backend email service, which is not configured.
+            Password reset requires a backend email service, which is not
+            configured.
           </p>
           <button
-            onClick={() => navigate('/login')}
+            onClick={() => navigate("/login")}
             className="mt-4 font-semibold text-[#155C4F]"
           >
             Back to login
@@ -51,7 +55,7 @@ export function ForgotPassword() {
           </Button>
           <button
             type="button"
-            onClick={() => navigate('/login')}
+            onClick={() => navigate("/login")}
             className="w-full text-center text-sm font-semibold text-[#155C4F]"
           >
             Back to login

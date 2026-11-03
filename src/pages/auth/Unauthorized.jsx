@@ -1,15 +1,15 @@
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
+import { useNavigate } from "react-router-dom"
+import { useAuth } from "@/contexts/AuthContext"
 
 export function Unauthorized() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const destination =
-    user?.role === 'admin'
-      ? { path: '/admin/dashboard', label: 'Go to admin dashboard' }
-      : user?.role === 'client'
-        ? { path: '/client/dashboard', label: 'Go to client dashboard' }
-        : { path: '/login', label: 'Sign in' }
+    user?.role === "admin"
+      ? { path: "/admin/dashboard", label: "Go to admin dashboard" }
+      : user?.role === "client"
+        ? { path: "/client/dashboard", label: "Go to client dashboard" }
+        : { path: "/login", label: "Sign in" }
 
   return (
     <main className="min-h-screen bg-[#F4F7F6]">
@@ -18,9 +18,7 @@ export function Unauthorized() {
           <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-rose-100">
             <span className="text-4xl">⚠️</span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            Access denied
-          </h1>
+          <h1 className="text-2xl font-bold text-slate-900">Access denied</h1>
           <p className="mt-3 text-slate-500">
             You don't have permission to view this page.
           </p>

@@ -1,37 +1,39 @@
-import { useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
-import Logo from '@/components/layout/Logo'
-import Button from '@/components/ui/Button'
-import Badge from '@/components/ui/Badge'
-import Input from '@/components/ui/Input'
+import { useState } from "react"
+import { useNavigate, useLocation } from "react-router-dom"
+import { useAuth } from "@/contexts/AuthContext"
+import Logo from "@/components/layout/Logo"
+import Button from "@/components/ui/Button"
+import Badge from "@/components/ui/Badge"
+import Input from "@/components/ui/Input"
 
 export function Login() {
   const navigate = useNavigate()
   const location = useLocation()
   const { login, authError } = useAuth()
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (loading) return
     setLoading(true)
-    setError('')
+    setError("")
 
     try {
       const result = await login(email, password)
-      const isAdmin = result.user.role === 'admin'
-      const rolePrefix = isAdmin ? '/admin/' : '/client/'
-      const roleHome = isAdmin ? '/admin/dashboard' : '/client/dashboard'
+      const isAdmin = result.user.role === "admin"
+      const rolePrefix = isAdmin ? "/admin/" : "/client/"
+      const roleHome = isAdmin ? "/admin/dashboard" : "/client/dashboard"
       const requestedPath = location.state?.from
-      const path = requestedPath?.startsWith(rolePrefix) ? requestedPath : roleHome
+      const path = requestedPath?.startsWith(rolePrefix)
+        ? requestedPath
+        : roleHome
       navigate(path, { replace: true })
     } catch (loginError) {
-      setError(loginError.message || 'Unable to sign in.')
+      setError(loginError.message || "Unable to sign in.")
     } finally {
       setLoading(false)
     }
@@ -50,14 +52,14 @@ export function Login() {
                 Make every euro work smarter.
               </div>
               <p className="mt-5 text-lg leading-8 text-emerald-100/80">
-                One calm, organized space to understand spending, grow savings, and
-                reach your financial goals.
+                One calm, organized space to understand spending, grow savings,
+                and reach your financial goals.
               </p>
               <div className="mt-10 grid grid-cols-3 gap-3">
                 {[
-                  ['€4,250', 'Balance'],
-                  ['44%', 'Saved'],
-                  ['6', 'Budgets'],
+                  ["€4,250", "Balance"],
+                  ["44%", "Saved"],
+                  ["6", "Budgets"],
                 ].map(([v, l]) => (
                   <div
                     key={l}
@@ -106,23 +108,23 @@ export function Login() {
             />
             <div className="flex items-center justify-between text-sm">
               <label className="flex items-center gap-2 text-slate-600">
-                <input type="checkbox" className="accent-emerald-700" defaultChecked />
+                <input
+                  type="checkbox"
+                  className="accent-emerald-700"
+                  defaultChecked
+                />
                 Remember me
               </label>
               <button
                 type="button"
-                onClick={() => navigate('/forgot-password')}
+                onClick={() => navigate("/forgot-password")}
                 className="font-semibold text-[#155C4F]"
               >
                 Forgot password?
               </button>
             </div>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full"
-            >
-              {loading ? 'Signing in...' : 'Sign in'}
+            <Button type="submit" disabled={loading} className="w-full">
+              {loading ? "Signing in..." : "Sign in"}
             </Button>
           </form>
 
@@ -130,13 +132,14 @@ export function Login() {
             BACKEND ACCOUNTS
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-            Sign in with an account registered with BudgetFlow. Admin accounts must be provisioned separately.
+            Sign in with an account registered with BudgetFlow. Admin accounts
+            must be provisioned separately.
           </div>
 
           <p className="mt-7 text-center text-sm text-slate-500">
-            New to BudgetFlow?{' '}
+            New to BudgetFlow?{" "}
             <button
-              onClick={() => navigate('/register')}
+              onClick={() => navigate("/register")}
               className="font-bold text-[#155C4F]"
             >
               Create account
