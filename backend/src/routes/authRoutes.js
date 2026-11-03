@@ -1,12 +1,17 @@
-const express = require('express');
-const authController = require('../controllers/authController');
-const requireAuth = require('../middlewares/authMiddleware');
+const express = require("express")
+const authController = require("../controllers/authController")
+const requireAuth = require("../middlewares/authMiddleware")
+const {
+  loginRateLimiter,
+  registerRateLimiter,
+} = require("../middlewares/authRateLimiters")
 
-const router = express.Router();
+const router = express.Router()
 
-router.post('/register', authController.register);
-router.post('/login', authController.login);
-router.get('/me', requireAuth, authController.getCurrentUser);
-router.patch('/currency', requireAuth, authController.updateCurrency);
+router.post("/register", registerRateLimiter, authController.register)
+router.post("/login", loginRateLimiter, authController.login)
+router.get("/me", requireAuth, authController.getCurrentUser)
+router.patch("/currency", requireAuth, authController.updateCurrency)
+router.patch("/profile", requireAuth, authController.updateProfile)
 
-module.exports = router;
+module.exports = router

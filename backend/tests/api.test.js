@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict")
 
-const { after, before, describe, it } = require("node:test")
+const { after, before, beforeEach, describe, it } = require("node:test")
 
 const mongoose = require("mongoose")
 
@@ -22,9 +22,20 @@ const Budget = require("../src/models/Budget")
 
 const Transaction = require("../src/models/Transaction")
 
+const Notification = require("../src/models/Notification")
+
 const User = require("../src/models/User")
 
 const { attachSocketServer } = require("../src/socket")
+
+const {
+  loginRateLimiter,
+  registerRateLimiter,
+} = require("../src/middlewares/authRateLimiters")
+
+const {
+  createNotificationBestEffort,
+} = require("../src/services/notificationService")
 
 const databaseName = `budgetflow_backend_test_${process.pid}_${Date.now()}`
 
@@ -131,7 +142,11 @@ async function socketEventNotReceived(socket, event, duration = 100) {
   })
 }
 
-async function createBudgetCategory(ownerId, type = "expense", isArchived = false) {
+async function createBudgetCategory(
+  ownerId,
+  type = "expense",
+  isArchived = false,
+) {
   const category = await Category.create({
     userId: ownerId,
     name: `Budget category ${new mongoose.Types.ObjectId()}`,
@@ -140,6 +155,72 @@ async function createBudgetCategory(ownerId, type = "expense", isArchived = fals
   })
 
   return category
+}
+
+async function createTestBudget(ownerId, categoryId, startDate, limit = 100) {
+  return Budget.create({
+    userId: ownerId,
+    categoryId,
+    name: `Notification budget ${new mongoose.Types.ObjectId()}`,
+    limit,
+    period: "monthly",
+    startDate,
+  })
+}
+
+function transactionInput(category, overrides = {}) {
+  return {
+    date: "2024-01-15",
+    description: "Notification test transaction",
+    category: category.name,
+    categoryId: category.id,
+    type: "expense",
+    amount: 10,
+    status: "completed",
+    ...overrides,
+  }
+}
+
+function createTestNotification(ownerId, overrides = {}) {
+  return Notification.create({
+    userId: ownerId,
+    type: "transaction_created",
+    title: "Test notification",
+    message: "A test notification message.",
+    ...overrides,
+  })
+}
+
+async function cleanTestNotifications(notifications) {
+  const ids = notifications.filter(Boolean).map(({ _id }) => _id)
+  if (ids.length > 0) await Notification.deleteMany({ _id: { $in: ids } })
+}
+
+async function cleanNotificationFixtures({
+  transactionIds = [],
+  budgetIds = [],
+  categoryIds = [],
+  relatedIds = [],
+}) {
+  const notificationRelatedIds = [
+    ...transactionIds,
+    ...budgetIds,
+    ...relatedIds,
+  ]
+  if (notificationRelatedIds.length > 0) {
+    await Notification.deleteMany({
+      relatedId: { $in: notificationRelatedIds },
+    })
+  }
+  if (transactionIds.length > 0) {
+    await Transaction.deleteMany({ _id: { $in: transactionIds } })
+  }
+  if (budgetIds.length > 0) {
+    await Budget.deleteMany({ _id: { $in: budgetIds } })
+  }
+  if (categoryIds.length > 0) {
+    await Category.deleteMany({ _id: { $in: categoryIds } })
+  }
 }
 
 describe("BudgetFlow API integration", () => {
@@ -155,6 +236,16 @@ describe("BudgetFlow API integration", () => {
     await new Promise((resolve) => server.once("listening", resolve))
 
     baseUrl = `http://127.0.0.1:${server.address().port}`
+  })
+
+  beforeEach(async () => {
+    // Notification triggers persist records while older API tests exercise transactions.
+    await Notification.deleteMany({})
+
+    await Promise.all([
+      loginRateLimiter.resetKey("127.0.0.1"),
+      registerRateLimiter.resetKey("127.0.0.1"),
+    ])
   })
 
   after(async () => {
@@ -271,6 +362,8 @@ describe("BudgetFlow API integration", () => {
     ]
 
     for (const body of invalidRegistrations) {
+      await registerRateLimiter.resetKey("127.0.0.1")
+
       const invalid = await request("/api/auth/register", {
         method: "POST",
         body,
@@ -282,6 +375,8 @@ describe("BudgetFlow API integration", () => {
         assert.equal((await invalid.json()).code, "UNSUPPORTED_CURRENCY")
       }
     }
+
+    await registerRateLimiter.resetKey("127.0.0.1")
 
     const duplicate = await request("/api/auth/register", {
       method: "POST",
@@ -331,7 +426,115 @@ describe("BudgetFlow API integration", () => {
 
     assert.equal(failure.status, 401)
 
-    assert.equal((await failure.json()).message, "Invalid email or password.")
+    const failureBody = await failure.json()
+
+    assert.equal(failureBody.message, "Invalid email or password.")
+
+    const unknownEmail = await request("/api/auth/login", {
+      method: "POST",
+
+      body: {
+        email: `unknown-${process.pid}-${Date.now()}@example.test`,
+        password: "wrong-password",
+      },
+    })
+
+    assert.equal(unknownEmail.status, 401)
+
+    assert.deepEqual(await unknownEmail.json(), failureBody)
+  })
+
+  it("limits login attempts after five requests and leaves other endpoints available", async () => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const response = await request("/api/auth/login", {
+        method: "POST",
+        body: { email: "unknown@example.test", password: "wrong-password" },
+      })
+
+      assert.equal(response.status, 401)
+    }
+
+    const limited = await request("/api/auth/login", {
+      method: "POST",
+      body: { email: "unknown@example.test", password: "wrong-password" },
+    })
+
+    assert.equal(limited.status, 429)
+    assert.deepEqual(await limited.json(), {
+      message: "Too many login attempts. Please try again later.",
+    })
+    assert.ok(Number(limited.headers.get("retry-after")) > 0)
+    assert.ok(limited.headers.get("ratelimit"))
+    assert.ok(limited.headers.get("ratelimit-policy"))
+
+    const health = await request("/api/health")
+    assert.equal(health.status, 200)
+
+    const register = await request("/api/auth/register", {
+      method: "POST",
+      body: {},
+    })
+    assert.equal(register.status, 400)
+  })
+
+  it("limits registration independently and resets the limiters between tests", async () => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const response = await request("/api/auth/register", {
+        method: "POST",
+        body: {},
+      })
+
+      assert.equal(response.status, 400)
+    }
+
+    const limited = await request("/api/auth/register", {
+      method: "POST",
+      body: {},
+    })
+
+    assert.equal(limited.status, 429)
+    assert.deepEqual(await limited.json(), {
+      message: "Too many registration attempts. Please try again later.",
+    })
+    assert.ok(Number(limited.headers.get("retry-after")) > 0)
+
+    const login = await request("/api/auth/login", {
+      method: "POST",
+      body: { email: "unknown@example.test", password: "wrong-password" },
+    })
+    assert.equal(login.status, 401)
+
+    for (let attempt = 1; attempt < 5; attempt += 1) {
+      const response = await request("/api/auth/login", {
+        method: "POST",
+        body: { email: "unknown@example.test", password: "wrong-password" },
+      })
+
+      assert.equal(response.status, 401)
+    }
+
+    const limitedLogin = await request("/api/auth/login", {
+      method: "POST",
+      body: { email: "unknown@example.test", password: "wrong-password" },
+    })
+    assert.equal(limitedLogin.status, 429)
+
+    await Promise.all([
+      loginRateLimiter.resetKey("127.0.0.1"),
+      registerRateLimiter.resetKey("127.0.0.1"),
+    ])
+
+    const resetLogin = await request("/api/auth/login", {
+      method: "POST",
+      body: { email: "unknown@example.test", password: "wrong-password" },
+    })
+    assert.equal(resetLogin.status, 401)
+
+    const resetRegister = await request("/api/auth/register", {
+      method: "POST",
+      body: {},
+    })
+    assert.equal(resetRegister.status, 400)
   })
 
   it("rejects login for pending accounts", async () => {
@@ -748,6 +951,84 @@ describe("BudgetFlow API integration", () => {
     assert.equal(response.status, 201)
 
     assert.equal((await response.json()).transaction.amount, 12.345)
+  })
+
+  it("updates user profile via PATCH /api/auth/profile", async () => {
+    // Update profile with valid data
+    const updateResponse = await request("/api/auth/profile", {
+      method: "PATCH",
+      accessToken: token,
+      body: {
+        firstName: "UpdatedFirst",
+        lastName: "UpdatedLast",
+        phone: "+1234567890",
+        country: "Germany",
+      },
+    })
+
+    assert.equal(updateResponse.status, 200)
+
+    const updated = await updateResponse.json()
+    assert.equal(updated.user.firstName, "UpdatedFirst")
+    assert.equal(updated.user.lastName, "UpdatedLast")
+    assert.equal(updated.user.phone, "+1234567890")
+    assert.equal(updated.user.country, "Germany")
+    assert.equal(updated.user.id, userId)
+    assert.equal(Object.hasOwn(updated.user, "password"), false)
+
+    // Verify changes persist
+    const verifyResponse = await request("/api/auth/me", { accessToken: token })
+    assert.equal(verifyResponse.status, 200)
+    const verified = await verifyResponse.json()
+    assert.equal(verified.user.firstName, "UpdatedFirst")
+    assert.equal(verified.user.lastName, "UpdatedLast")
+  })
+
+  it("rejects profile update with missing required fields", async () => {
+    const missingFirst = await request("/api/auth/profile", {
+      method: "PATCH",
+      accessToken: token,
+      body: {
+        firstName: "",
+        lastName: "Last",
+      },
+    })
+    assert.equal(missingFirst.status, 400)
+    assert.equal(
+      (await missingFirst.json()).message,
+      "First name and last name are required.",
+    )
+
+    const missingLast = await request("/api/auth/profile", {
+      method: "PATCH",
+      accessToken: token,
+      body: {
+        firstName: "First",
+        lastName: "  ",
+      },
+    })
+    assert.equal(missingLast.status, 400)
+  })
+
+  it("requires authentication for profile updates", async () => {
+    const noAuth = await request("/api/auth/profile", {
+      method: "PATCH",
+      body: {
+        firstName: "Test",
+        lastName: "User",
+      },
+    })
+    assert.equal(noAuth.status, 401)
+
+    const invalidToken = await request("/api/auth/profile", {
+      method: "PATCH",
+      accessToken: "invalid-token",
+      body: {
+        firstName: "Test",
+        lastName: "User",
+      },
+    })
+    assert.equal(invalidToken.status, 401)
   })
 
   it("creates, lists, reads, updates, and deletes the signed-in user transaction", async () => {
@@ -1596,6 +1877,120 @@ describe("BudgetFlow API integration", () => {
     assert.equal((await legacyArchive.json()).action, "archived")
   })
 
+  it("preserves category type consistency and supports unlinked transactions", async () => {
+    const expenseCategory = await createBudgetCategory(userId, "expense")
+    const incomeCategory = await createBudgetCategory(userId, "income")
+    const transactionIds = []
+
+    try {
+      for (const [category, type] of [
+        [expenseCategory, "income"],
+        [incomeCategory, "expense"],
+      ]) {
+        const mismatch = await request("/api/transactions", {
+          method: "POST",
+          accessToken: token,
+          body: transactionInput(category, { type }),
+        })
+        assert.equal(mismatch.status, 400)
+      }
+
+      const expenseResponse = await request("/api/transactions", {
+        method: "POST",
+        accessToken: token,
+        body: transactionInput(expenseCategory),
+      })
+      assert.equal(expenseResponse.status, 201)
+      const expenseTransaction = (await expenseResponse.json()).transaction
+      transactionIds.push(new mongoose.Types.ObjectId(expenseTransaction.id))
+
+      const mismatchedIncomeUpdate = await request(
+        `/api/transactions/${expenseTransaction.id}`,
+        {
+          method: "PATCH",
+          accessToken: token,
+          body: { type: "income" },
+        },
+      )
+      assert.equal(mismatchedIncomeUpdate.status, 400)
+
+      const incomeUpdate = await request(
+        `/api/transactions/${expenseTransaction.id}`,
+        {
+          method: "PATCH",
+          accessToken: token,
+          body: { type: "income", categoryId: incomeCategory.id },
+        },
+      )
+      assert.equal(incomeUpdate.status, 200)
+      const incomeTransaction = (await incomeUpdate.json()).transaction
+      assert.equal(incomeTransaction.type, "income")
+      assert.equal(incomeTransaction.categoryId, incomeCategory.id)
+      assert.equal(incomeTransaction.category, incomeCategory.name)
+
+      const mismatchedExpenseUpdate = await request(
+        `/api/transactions/${expenseTransaction.id}`,
+        {
+          method: "PATCH",
+          accessToken: token,
+          body: { type: "expense" },
+        },
+      )
+      assert.equal(mismatchedExpenseUpdate.status, 400)
+
+      const removeCategory = await request(
+        `/api/transactions/${expenseTransaction.id}`,
+        {
+          method: "PATCH",
+          accessToken: token,
+          body: { categoryId: null, type: "expense" },
+        },
+      )
+      assert.equal(removeCategory.status, 200)
+      const unlinkedTransaction = (await removeCategory.json()).transaction
+      assert.equal(unlinkedTransaction.type, "expense")
+      assert.equal(Object.hasOwn(unlinkedTransaction, "categoryId"), false)
+      assert.equal(unlinkedTransaction.category, incomeCategory.name)
+
+      const legacyResponse = await request("/api/transactions", {
+        method: "POST",
+        accessToken: token,
+        body: {
+          date: "2026-10-28",
+          description: "Unlinked category transaction",
+          category: "Legacy free-text",
+          type: "expense",
+          amount: 8,
+        },
+      })
+      assert.equal(legacyResponse.status, 201)
+      const legacyTransaction = (await legacyResponse.json()).transaction
+      transactionIds.push(new mongoose.Types.ObjectId(legacyTransaction.id))
+      assert.equal(Object.hasOwn(legacyTransaction, "categoryId"), false)
+
+      const legacyUpdate = await request(
+        `/api/transactions/${legacyTransaction.id}`,
+        {
+          method: "PATCH",
+          accessToken: token,
+          body: { description: "Updated unlinked transaction" },
+        },
+      )
+      assert.equal(legacyUpdate.status, 200)
+      const updatedLegacyTransaction = (await legacyUpdate.json()).transaction
+      assert.equal(
+        updatedLegacyTransaction.description,
+        "Updated unlinked transaction",
+      )
+      assert.equal(Object.hasOwn(updatedLegacyTransaction, "categoryId"), false)
+    } finally {
+      await cleanNotificationFixtures({
+        transactionIds,
+        categoryIds: [expenseCategory._id, incomeCategory._id],
+      })
+    }
+  })
+
   it("authenticates sockets and emits transaction events only to the owner", async () => {
     await assert.rejects(
       connectSocket(),
@@ -1837,14 +2232,11 @@ describe("BudgetFlow API integration", () => {
     assert.equal(created.categoryId.id, category.id)
     assert.equal(created.startDate, "2024-02-01")
 
-    const invalidCategoryUpdate = await request(
-      `/api/budgets/${created.id}`,
-      {
-        method: "PATCH",
-        accessToken: token,
-        body: { categoryId: "not-an-id" },
-      },
-    )
+    const invalidCategoryUpdate = await request(`/api/budgets/${created.id}`, {
+      method: "PATCH",
+      accessToken: token,
+      body: { categoryId: "not-an-id" },
+    })
     assert.equal(invalidCategoryUpdate.status, 400)
 
     const ownerList = await request("/api/budgets", { accessToken: token })
@@ -2254,6 +2646,1019 @@ describe("BudgetFlow API integration", () => {
     } finally {
       ownerSocket.disconnect()
       observerSocket.disconnect()
+    }
+  })
+
+  it("keeps budget REST writes successful when Socket.IO emission fails", async () => {
+    const category = await createBudgetCategory(userId)
+    const originalIo = app.get("io")
+    const originalConsoleError = console.error
+    let budgetId
+
+    try {
+      app.set("io", {
+        to() {
+          return {
+            emit() {
+              throw new Error("Simulated Socket.IO emission failure.")
+            },
+          }
+        },
+      })
+      console.error = () => {}
+
+      const createResponse = await request("/api/budgets", {
+        method: "POST",
+        accessToken: token,
+        body: {
+          name: "Budget despite socket failure",
+          limit: 100,
+          categoryId: category.id,
+          period: "monthly",
+          startDate: "2024-06-01",
+        },
+      })
+      assert.equal(createResponse.status, 201)
+      budgetId = (await createResponse.json()).budget.id
+      assert.ok(await Budget.exists({ _id: budgetId, userId }))
+
+      const updateResponse = await request(`/api/budgets/${budgetId}`, {
+        method: "PATCH",
+        accessToken: token,
+        body: { limit: 125 },
+      })
+      assert.equal(updateResponse.status, 200)
+      assert.equal((await Budget.findById(budgetId)).limit, 125)
+
+      const deleteResponse = await request(`/api/budgets/${budgetId}`, {
+        method: "DELETE",
+        accessToken: token,
+      })
+      assert.equal(deleteResponse.status, 200)
+      assert.equal(await Budget.exists({ _id: budgetId }), null)
+    } finally {
+      console.error = originalConsoleError
+      app.set("io", originalIo)
+      if (budgetId) await Budget.deleteOne({ _id: budgetId })
+      await Category.deleteOne({ _id: category.id })
+    }
+  })
+
+  it("validates notification fields, defaults isRead, and defines owner-scoped indexes", async () => {
+    const notification = new Notification({
+      userId,
+      type: "transaction_created",
+      title: "Valid title",
+      message: "Valid message",
+    })
+
+    assert.equal(notification.isRead, false)
+    await notification.validate()
+
+    const invalid = new Notification({
+      userId,
+      type: "unsupported_type",
+      title: "Invalid type",
+      message: "Invalid notification type.",
+    })
+    await assert.rejects(invalid.validate(), { name: "ValidationError" })
+
+    const invalidRelatedType = new Notification({
+      userId,
+      type: "transaction_created",
+      title: "Invalid related type",
+      message: "Invalid related type.",
+      relatedType: "category",
+    })
+    await assert.rejects(invalidRelatedType.validate(), {
+      name: "ValidationError",
+    })
+
+    const indexes = Notification.schema.indexes().map(([fields]) => fields)
+    assert.ok(
+      indexes.some((fields) => fields.userId === 1 && fields.createdAt === -1),
+    )
+    assert.ok(
+      indexes.some((fields) => fields.userId === 1 && fields.isRead === 1),
+    )
+  })
+
+  it("lists authenticated notifications and excludes other users' records", async () => {
+    const ownerNotification = await createTestNotification(userId)
+    const foreignNotification = await createTestNotification(
+      jwt.decode(otherToken).sub,
+      { title: "Foreign notification" },
+    )
+
+    try {
+      const response = await request("/api/notifications", {
+        accessToken: token,
+      })
+
+      assert.equal(response.status, 200)
+      const result = await response.json()
+      assert.deepEqual(
+        result.notifications.map(({ id }) => id),
+        [ownerNotification.id],
+      )
+      assert.deepEqual(result.pagination, {
+        page: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
+      })
+      assert.notEqual(result.notifications[0].id, foreignNotification.id)
+    } finally {
+      await cleanTestNotifications([ownerNotification, foreignNotification])
+    }
+  })
+
+  it("requires authentication to list notifications and unread count", async () => {
+    const listResponse = await request("/api/notifications")
+    const countResponse = await request("/api/notifications/unread-count")
+
+    assert.equal(listResponse.status, 401)
+    assert.equal(countResponse.status, 401)
+  })
+
+  it("paginates notifications and caps the requested limit", async () => {
+    const notifications = await Promise.all([
+      createTestNotification(userId, { title: "Pagination one" }),
+      createTestNotification(userId, { title: "Pagination two" }),
+      createTestNotification(userId, { title: "Pagination three" }),
+    ])
+
+    try {
+      const firstPageResponse = await request(
+        "/api/notifications?page=1&limit=2",
+        { accessToken: token },
+      )
+      const firstPage = await firstPageResponse.json()
+      assert.equal(firstPageResponse.status, 200)
+      assert.equal(firstPage.notifications.length, 2)
+      assert.deepEqual(firstPage.pagination, {
+        page: 1,
+        limit: 2,
+        total: 3,
+        totalPages: 2,
+      })
+
+      const secondPageResponse = await request(
+        "/api/notifications?page=2&limit=2",
+        { accessToken: token },
+      )
+      const secondPage = await secondPageResponse.json()
+      assert.equal(secondPage.notifications.length, 1)
+      assert.equal(secondPage.pagination.page, 2)
+
+      const cappedResponse = await request("/api/notifications?limit=10000", {
+        accessToken: token,
+      })
+      const capped = await cappedResponse.json()
+      assert.equal(capped.pagination.limit, 100)
+      assert.equal(capped.notifications.length, 3)
+    } finally {
+      await cleanTestNotifications(notifications)
+    }
+  })
+
+  it("orders notifications newest first", async () => {
+    const older = await createTestNotification(userId, {
+      title: "Older notification",
+      createdAt: new Date("2024-01-01T00:00:00.000Z"),
+    })
+    const newer = await createTestNotification(userId, {
+      title: "Newer notification",
+      createdAt: new Date("2024-01-02T00:00:00.000Z"),
+    })
+
+    try {
+      const response = await request("/api/notifications", {
+        accessToken: token,
+      })
+      const result = await response.json()
+
+      assert.equal(response.status, 200)
+      assert.deepEqual(
+        result.notifications.map(({ id }) => id),
+        [newer.id, older.id],
+      )
+    } finally {
+      await cleanTestNotifications([older, newer])
+    }
+  })
+
+  it("returns the authenticated user's unread count only", async () => {
+    const unread = await createTestNotification(userId)
+    const read = await createTestNotification(userId, {
+      title: "Read notification",
+      isRead: true,
+    })
+    const foreign = await createTestNotification(jwt.decode(otherToken).sub)
+
+    try {
+      const response = await request("/api/notifications/unread-count", {
+        accessToken: token,
+      })
+
+      assert.equal(response.status, 200)
+      assert.deepEqual(await response.json(), { unreadCount: 1 })
+    } finally {
+      await cleanTestNotifications([unread, read, foreign])
+    }
+  })
+
+  it("marks an owned notification as read and persists the change", async () => {
+    const notification = await createTestNotification(userId)
+
+    try {
+      const response = await request(
+        `/api/notifications/${notification.id}/read`,
+        { method: "PATCH", accessToken: token },
+      )
+      const result = await response.json()
+
+      assert.equal(response.status, 200)
+      assert.equal(result.notification.id, notification.id)
+      assert.equal(result.notification.isRead, true)
+      assert.equal(
+        (await Notification.findById(notification.id).lean()).isRead,
+        true,
+      )
+    } finally {
+      await cleanTestNotifications([notification])
+    }
+  })
+
+  it("marks only the authenticated user's unread notifications as read", async () => {
+    const unread = await createTestNotification(userId)
+    const alreadyRead = await createTestNotification(userId, {
+      title: "Already read",
+      isRead: true,
+    })
+    const foreign = await createTestNotification(jwt.decode(otherToken).sub)
+
+    try {
+      const response = await request("/api/notifications/read-all", {
+        method: "PATCH",
+        accessToken: token,
+      })
+
+      assert.equal(response.status, 200)
+      assert.deepEqual(await response.json(), { modifiedCount: 1 })
+      assert.equal((await Notification.findById(unread.id).lean()).isRead, true)
+      assert.equal(
+        (await Notification.findById(alreadyRead.id).lean()).isRead,
+        true,
+      )
+      assert.equal(
+        (await Notification.findById(foreign.id).lean()).isRead,
+        false,
+      )
+    } finally {
+      await cleanTestNotifications([unread, alreadyRead, foreign])
+    }
+  })
+
+  it("deletes an owned notification and confirms the database change", async () => {
+    const notification = await createTestNotification(userId)
+
+    const response = await request(`/api/notifications/${notification.id}`, {
+      method: "DELETE",
+      accessToken: token,
+    })
+
+    assert.equal(response.status, 200)
+    assert.deepEqual(await response.json(), {
+      message: "Notification deleted.",
+    })
+    assert.equal(await Notification.exists({ _id: notification.id }), null)
+  })
+
+  it("does not allow reading another user's notification", async () => {
+    const notification = await createTestNotification(
+      jwt.decode(otherToken).sub,
+    )
+
+    try {
+      const response = await request(
+        `/api/notifications/${notification.id}/read`,
+        { method: "PATCH", accessToken: token },
+      )
+
+      assert.equal(response.status, 404)
+      assert.equal(
+        (await Notification.findById(notification.id).lean()).isRead,
+        false,
+      )
+    } finally {
+      await cleanTestNotifications([notification])
+    }
+  })
+
+  it("does not allow deleting another user's notification", async () => {
+    const notification = await createTestNotification(
+      jwt.decode(otherToken).sub,
+    )
+
+    try {
+      const response = await request(`/api/notifications/${notification.id}`, {
+        method: "DELETE",
+        accessToken: token,
+      })
+
+      assert.equal(response.status, 404)
+      assert.ok(await Notification.exists({ _id: notification.id }))
+    } finally {
+      await cleanTestNotifications([notification])
+    }
+  })
+
+  it("returns not found for invalid notification IDs", async () => {
+    const readResponse = await request(
+      "/api/notifications/not-an-object-id/read",
+      { method: "PATCH", accessToken: token },
+    )
+    const deleteResponse = await request(
+      "/api/notifications/not-an-object-id",
+      { method: "DELETE", accessToken: token },
+    )
+
+    assert.equal(readResponse.status, 404)
+    assert.equal(deleteResponse.status, 404)
+  })
+
+  it("persists transaction notifications and emits them only to the owner", async () => {
+    const category = await createBudgetCategory(userId)
+    const categoryIds = [category._id]
+    const transactionIds = []
+    const ownerSocket = await connectSocket({ token })
+    const otherSocket = await connectSocket({ token: otherToken })
+
+    try {
+      const createEvent = nextSocketEvent(ownerSocket, "notification:created")
+      const foreignCreateEvent = socketEventNotReceived(
+        otherSocket,
+        "notification:created",
+      )
+      const createResponse = await request("/api/transactions", {
+        method: "POST",
+        accessToken: token,
+        body: {
+          ...transactionInput(category),
+          userId: jwt.decode(otherToken).sub,
+        },
+      })
+
+      assert.equal(createResponse.status, 201)
+      const created = (await createResponse.json()).transaction
+      transactionIds.push(new mongoose.Types.ObjectId(created.id))
+      const createdEvent = await createEvent
+      assert.equal(createdEvent.type, "transaction_created")
+      assert.equal(createdEvent.relatedId, created.id)
+      assert.equal(createdEvent.relatedType, "transaction")
+      assert.equal(createdEvent.userId, userId)
+      assert.equal(await foreignCreateEvent, true)
+
+      const updateEvent = nextSocketEvent(ownerSocket, "notification:created")
+      const foreignUpdateEvent = socketEventNotReceived(
+        otherSocket,
+        "notification:created",
+      )
+      const updateResponse = await request(`/api/transactions/${created.id}`, {
+        method: "PATCH",
+        accessToken: token,
+        body: { description: "Updated notification transaction" },
+      })
+
+      assert.equal(updateResponse.status, 200)
+      assert.equal((await updateResponse.json()).transaction.id, created.id)
+      const updatedEvent = await updateEvent
+      assert.equal(updatedEvent.type, "transaction_updated")
+      assert.equal(updatedEvent.relatedId, created.id)
+      assert.equal(await foreignUpdateEvent, true)
+
+      const deleteEvent = nextSocketEvent(ownerSocket, "notification:created")
+      const foreignDeleteEvent = socketEventNotReceived(
+        otherSocket,
+        "notification:created",
+      )
+      const deleteResponse = await request(`/api/transactions/${created.id}`, {
+        method: "DELETE",
+        accessToken: token,
+      })
+
+      assert.equal(deleteResponse.status, 200)
+      const deletedEvent = await deleteEvent
+      assert.equal(deletedEvent.type, "transaction_deleted")
+      assert.equal(deletedEvent.relatedId, created.id)
+      assert.equal(await foreignDeleteEvent, true)
+
+      const records = await Notification.find({
+        userId,
+        relatedId: created.id,
+      }).sort({ type: 1 })
+      assert.deepEqual(records.map(({ type }) => type).sort(), [
+        "transaction_created",
+        "transaction_deleted",
+        "transaction_updated",
+      ])
+      assert.ok(
+        records.every(({ relatedType }) => relatedType === "transaction"),
+      )
+      assert.equal(
+        await Notification.countDocuments({
+          userId: jwt.decode(otherToken).sub,
+          relatedId: created.id,
+        }),
+        0,
+      )
+    } finally {
+      ownerSocket.disconnect()
+      otherSocket.disconnect()
+      await cleanNotificationFixtures({ transactionIds, categoryIds })
+    }
+  })
+
+  it("does not create transaction notifications for denied or failed writes", async () => {
+    const category = await createBudgetCategory(userId)
+    const foreignCategory = await createBudgetCategory(
+      jwt.decode(otherToken).sub,
+    )
+    const foreignTransaction = await Transaction.create({
+      ...transactionInput(foreignCategory),
+      userId: jwt.decode(otherToken).sub,
+    })
+    const baselineCount = await Notification.countDocuments({ userId })
+    const foreignRead = await request(
+      `/api/transactions/${foreignTransaction.id}`,
+      { accessToken: token },
+    )
+    const foreignDelete = await request(
+      `/api/transactions/${foreignTransaction.id}`,
+      { method: "DELETE", accessToken: token },
+    )
+    assert.equal(foreignRead.status, 404)
+    assert.equal(foreignDelete.status, 404)
+
+    const originalCreate = Transaction.create
+    try {
+      Transaction.create = async () => {
+        throw new Error("Simulated transaction write failure.")
+      }
+      const failedWrite = await request("/api/transactions", {
+        method: "POST",
+        accessToken: token,
+        body: transactionInput(category),
+      })
+      assert.equal(failedWrite.status, 500)
+    } finally {
+      Transaction.create = originalCreate
+      await Transaction.deleteOne({ _id: foreignTransaction._id })
+      await Category.deleteMany({
+        _id: { $in: [category._id, foreignCategory._id] },
+      })
+    }
+
+    assert.equal(await Notification.countDocuments({ userId }), baselineCount)
+  })
+
+  it("keeps a successful transaction when notification persistence fails", async () => {
+    const category = await createBudgetCategory(userId, "income")
+    const originalSave = Notification.prototype.save
+    const originalConsoleError = console.error
+    let transactionId
+
+    try {
+      Notification.prototype.save = async function failNotificationSave() {
+        throw new Error("Simulated notification persistence failure.")
+      }
+      console.error = () => {}
+
+      const response = await request("/api/transactions", {
+        method: "POST",
+        accessToken: token,
+        body: transactionInput(category, { type: "income" }),
+      })
+
+      assert.equal(response.status, 201)
+      const { transaction } = await response.json()
+      transactionId = new mongoose.Types.ObjectId(transaction.id)
+      assert.ok(await Transaction.exists({ _id: transactionId, userId }))
+      assert.equal(
+        await Notification.countDocuments({ relatedId: transactionId }),
+        0,
+      )
+    } finally {
+      Notification.prototype.save = originalSave
+      console.error = originalConsoleError
+      await cleanNotificationFixtures({
+        transactionIds: transactionId ? [transactionId] : [],
+        categoryIds: [category._id],
+      })
+    }
+  })
+
+  it("persists notifications when Socket.IO is unavailable or emission fails", async () => {
+    const missingIoRelatedId = new mongoose.Types.ObjectId()
+    const originalConsoleError = console.error
+    const emissionFailureRelatedId = new mongoose.Types.ObjectId()
+
+    try {
+      const savedWithoutIo = await createNotificationBestEffort(
+        {
+          userId,
+          type: "transaction_created",
+          title: "Persisted without socket",
+          message: "Socket.IO is not configured.",
+          relatedId: missingIoRelatedId,
+          relatedType: "transaction",
+        },
+        undefined,
+      )
+      assert.ok(savedWithoutIo)
+      assert.ok(await Notification.exists({ _id: savedWithoutIo._id }))
+
+      console.error = () => {}
+      const savedDespiteEmitFailure = await createNotificationBestEffort(
+        {
+          userId,
+          type: "transaction_created",
+          title: "Persisted despite socket failure",
+          message: "The socket emitter throws.",
+          relatedId: emissionFailureRelatedId,
+          relatedType: "transaction",
+        },
+        {
+          to() {
+            return {
+              emit() {
+                throw new Error("Simulated socket emission failure.")
+              },
+            }
+          },
+        },
+      )
+      assert.ok(savedDespiteEmitFailure)
+      assert.ok(await Notification.exists({ _id: savedDespiteEmitFailure._id }))
+    } finally {
+      console.error = originalConsoleError
+      await Notification.deleteMany({
+        relatedId: {
+          $in: [missingIoRelatedId, emissionFailureRelatedId],
+        },
+      })
+    }
+  })
+
+  it("keeps transaction writes and notifications when Socket.IO emission throws", async () => {
+    const category = await createBudgetCategory(userId)
+    const originalIo = app.get("io")
+    const originalConsoleError = console.error
+    const transactionIds = []
+
+    try {
+      app.set("io", {
+        to() {
+          return {
+            emit() {
+              throw new Error("Simulated Socket.IO emission failure.")
+            },
+          }
+        },
+      })
+      console.error = () => {}
+
+      const createResponse = await request("/api/transactions", {
+        method: "POST",
+        accessToken: token,
+        body: transactionInput(category),
+      })
+      assert.equal(createResponse.status, 201)
+      const { transaction: created } = await createResponse.json()
+      const transactionId = new mongoose.Types.ObjectId(created.id)
+      transactionIds.push(transactionId)
+      assert.ok(await Transaction.exists({ _id: transactionId, userId }))
+      assert.ok(
+        await Notification.exists({
+          userId,
+          type: "transaction_created",
+          relatedId: transactionId,
+        }),
+      )
+
+      const updateResponse = await request(`/api/transactions/${created.id}`, {
+        method: "PATCH",
+        accessToken: token,
+        body: { description: "Updated despite socket failure" },
+      })
+      assert.equal(updateResponse.status, 200)
+      assert.equal(
+        (await Transaction.findById(transactionId)).description,
+        "Updated despite socket failure",
+      )
+      assert.ok(
+        await Notification.exists({
+          userId,
+          type: "transaction_updated",
+          relatedId: transactionId,
+        }),
+      )
+
+      const deleteResponse = await request(`/api/transactions/${created.id}`, {
+        method: "DELETE",
+        accessToken: token,
+      })
+      assert.equal(deleteResponse.status, 200)
+      assert.equal(
+        await Transaction.exists({ _id: transactionId, userId }),
+        null,
+      )
+      assert.ok(
+        await Notification.exists({
+          userId,
+          type: "transaction_deleted",
+          relatedId: transactionId,
+        }),
+      )
+    } finally {
+      app.set("io", originalIo)
+      console.error = originalConsoleError
+      await cleanNotificationFixtures({
+        transactionIds,
+        categoryIds: [category._id],
+      })
+    }
+  })
+
+  it("creates budget alerts at the exact warning and exceeded thresholds only", async () => {
+    const cases = [
+      { month: "2024-01", amount: 84.99, expectedType: null },
+      { month: "2024-02", amount: 85, expectedType: "budget_warning" },
+      { month: "2024-03", amount: 99.99, expectedType: "budget_warning" },
+      { month: "2024-04", amount: 100, expectedType: "budget_exceeded" },
+      { month: "2024-05", amount: 105, expectedType: "budget_exceeded" },
+    ]
+    const categoryIds = []
+    const budgetIds = []
+    const transactionIds = []
+
+    try {
+      for (const { month, amount, expectedType } of cases) {
+        const category = await createBudgetCategory(userId)
+        const budget = await createTestBudget(
+          userId,
+          category.id,
+          `${month}-01`,
+        )
+        categoryIds.push(category._id)
+        budgetIds.push(budget._id)
+
+        const response = await request("/api/transactions", {
+          method: "POST",
+          accessToken: token,
+          body: transactionInput(category, {
+            date: `${month}-15`,
+            amount,
+          }),
+        })
+        assert.equal(response.status, 201)
+        const { transaction } = await response.json()
+        transactionIds.push(new mongoose.Types.ObjectId(transaction.id))
+
+        const spentResponse = await request(`/api/budgets/${budget.id}/spent`, {
+          accessToken: token,
+        })
+        assert.equal(spentResponse.status, 200)
+        const spent = await spentResponse.json()
+        assert.equal(spent.percentUsed, amount)
+        assert.equal(
+          spent.status,
+          amount >= 100 ? "exceeded" : amount >= 85 ? "warning" : "healthy",
+        )
+
+        const alerts = await Notification.find({
+          relatedId: budget._id,
+          type: { $in: ["budget_warning", "budget_exceeded"] },
+        })
+        assert.equal(alerts.length, expectedType ? 1 : 0)
+        if (expectedType) assert.equal(alerts[0].type, expectedType)
+      }
+    } finally {
+      await cleanNotificationFixtures({
+        transactionIds,
+        budgetIds,
+        categoryIds,
+      })
+    }
+  })
+
+  it("excludes pending expenses and income from budget alerts", async () => {
+    const expenseCategory = await createBudgetCategory(userId)
+    const incomeCategory = await createBudgetCategory(userId, "income")
+    const budget = await createTestBudget(
+      userId,
+      expenseCategory.id,
+      "2024-06-01",
+    )
+    const categoryIds = [expenseCategory._id, incomeCategory._id]
+    const transactionIds = []
+
+    try {
+      for (const [category, overrides] of [
+        [expenseCategory, { amount: 100, status: "pending" }],
+        [incomeCategory, { amount: 100, type: "income" }],
+        [expenseCategory, { amount: 84.99 }],
+      ]) {
+        const response = await request("/api/transactions", {
+          method: "POST",
+          accessToken: token,
+          body: transactionInput(category, {
+            date: "2024-06-15",
+            ...overrides,
+          }),
+        })
+        assert.equal(response.status, 201)
+        const { transaction } = await response.json()
+        transactionIds.push(new mongoose.Types.ObjectId(transaction.id))
+      }
+
+      const spentResponse = await request(`/api/budgets/${budget.id}/spent`, {
+        accessToken: token,
+      })
+      assert.equal((await spentResponse.json()).spent, 84.99)
+      assert.equal(
+        await Notification.countDocuments({
+          relatedId: budget._id,
+          type: { $in: ["budget_warning", "budget_exceeded"] },
+        }),
+        0,
+      )
+    } finally {
+      await cleanNotificationFixtures({
+        transactionIds,
+        budgetIds: [budget._id],
+        categoryIds,
+      })
+    }
+  })
+
+  it("recalculates the old and new monthly budgets after transaction changes", async () => {
+    const oldCategory = await createBudgetCategory(userId)
+    const newCategory = await createBudgetCategory(userId)
+    const incomeCategory = await createBudgetCategory(userId, "income")
+    const oldBudget = await createTestBudget(
+      userId,
+      oldCategory.id,
+      "2024-01-01",
+    )
+    const newBudget = await createTestBudget(
+      userId,
+      newCategory.id,
+      "2024-02-01",
+    )
+    const oldBase = await Transaction.create({
+      ...transactionInput(oldCategory, { amount: 80 }),
+      userId,
+    })
+    const newBase = await Transaction.create({
+      ...transactionInput(newCategory, {
+        date: "2024-02-10",
+        amount: 80,
+      }),
+      userId,
+    })
+    const transactionIds = [oldBase._id, newBase._id]
+    const budgetIds = [oldBudget._id, newBudget._id]
+    const categoryIds = [oldCategory._id, newCategory._id, incomeCategory._id]
+    let targetId
+
+    try {
+      const createResponse = await request("/api/transactions", {
+        method: "POST",
+        accessToken: token,
+        body: transactionInput(oldCategory, { amount: 5 }),
+      })
+      assert.equal(createResponse.status, 201)
+      const { transaction: created } = await createResponse.json()
+      targetId = new mongoose.Types.ObjectId(created.id)
+      transactionIds.push(targetId)
+
+      let alerts = await Notification.find({
+        relatedId: oldBudget._id,
+        type: "budget_warning",
+      })
+      assert.equal(alerts.length, 1)
+
+      const amountUpdate = await request(`/api/transactions/${created.id}`, {
+        method: "PATCH",
+        accessToken: token,
+        body: { amount: 10 },
+      })
+      assert.equal(amountUpdate.status, 200)
+
+      const moveUpdate = await request(`/api/transactions/${created.id}`, {
+        method: "PATCH",
+        accessToken: token,
+        body: {
+          categoryId: newCategory.id,
+          date: "2024-02-15",
+        },
+      })
+      assert.equal(moveUpdate.status, 200)
+
+      alerts = await Notification.find({
+        relatedId: newBudget._id,
+        type: "budget_warning",
+      })
+      assert.equal(alerts.length, 1)
+      assert.match(alerts[0].message, /2024-02/)
+
+      const pendingUpdate = await request(`/api/transactions/${created.id}`, {
+        method: "PATCH",
+        accessToken: token,
+        body: { status: "pending" },
+      })
+      assert.equal(pendingUpdate.status, 200)
+      const pendingSpent = await request(`/api/budgets/${newBudget.id}/spent`, {
+        accessToken: token,
+      })
+      assert.equal((await pendingSpent.json()).spent, 80)
+
+      await Notification.updateOne({ _id: alerts[0]._id }, {
+        $set: { isRead: true },
+      })
+      const completedUpdate = await request(`/api/transactions/${created.id}`, {
+        method: "PATCH",
+        accessToken: token,
+        body: { status: "completed" },
+      })
+      assert.equal(completedUpdate.status, 200)
+      assert.equal(
+        await Notification.countDocuments({
+          relatedId: newBudget._id,
+          type: "budget_warning",
+        }),
+        1,
+      )
+      assert.equal(
+        (await Notification.findById(alerts[0]._id).lean()).isRead,
+        true,
+      )
+
+      const incomeUpdate = await request(`/api/transactions/${created.id}`, {
+        method: "PATCH",
+        accessToken: token,
+        body: {
+          type: "income",
+          categoryId: incomeCategory.id,
+        },
+      })
+      assert.equal(incomeUpdate.status, 200)
+      const incomeSpent = await request(`/api/budgets/${newBudget.id}/spent`, {
+        accessToken: token,
+      })
+      assert.equal((await incomeSpent.json()).spent, 80)
+
+      const restoreExpense = await request(`/api/transactions/${created.id}`, {
+        method: "PATCH",
+        accessToken: token,
+        body: {
+          type: "expense",
+          categoryId: newCategory.id,
+        },
+      })
+      assert.equal(restoreExpense.status, 200)
+      assert.equal(
+        await Notification.countDocuments({
+          relatedId: newBudget._id,
+          type: "budget_warning",
+        }),
+        1,
+      )
+
+      const deleteResponse = await request(`/api/transactions/${created.id}`, {
+        method: "DELETE",
+        accessToken: token,
+      })
+      assert.equal(deleteResponse.status, 200)
+      const deletedSpent = await request(`/api/budgets/${newBudget.id}/spent`, {
+        accessToken: token,
+      })
+      assert.equal((await deletedSpent.json()).spent, 80)
+      assert.equal(
+        await Notification.countDocuments({
+          relatedId: newBudget._id,
+          type: "budget_warning",
+        }),
+        1,
+      )
+    } finally {
+      await cleanNotificationFixtures({
+        transactionIds,
+        budgetIds,
+        categoryIds,
+      })
+    }
+  })
+
+  it("deduplicates read warning alerts and records a separate exceeded transition", async () => {
+    const category = await createBudgetCategory(userId)
+    const budget = await createTestBudget(userId, category.id, "2024-07-01")
+    const baseline = await Transaction.create({
+      ...transactionInput(category, {
+        date: "2024-07-10",
+        amount: 84,
+      }),
+      userId,
+    })
+    const transactionIds = [baseline._id]
+    const categoryIds = [category._id]
+    let budgetIds = [budget._id]
+
+    try {
+      const concurrentCreates = await Promise.all([
+        request("/api/transactions", {
+          method: "POST",
+          accessToken: token,
+          body: transactionInput(category, {
+            date: "2024-07-11",
+            amount: 1,
+            description: "Concurrent threshold expense A",
+          }),
+        }),
+        request("/api/transactions", {
+          method: "POST",
+          accessToken: token,
+          body: transactionInput(category, {
+            date: "2024-07-12",
+            amount: 1,
+            description: "Concurrent threshold expense B",
+          }),
+        }),
+      ])
+      for (const response of concurrentCreates) {
+        assert.equal(response.status, 201)
+        const { transaction } = await response.json()
+        transactionIds.push(new mongoose.Types.ObjectId(transaction.id))
+      }
+
+      let alerts = await Notification.find({
+        relatedId: budget._id,
+        type: "budget_warning",
+      })
+      assert.equal(alerts.length, 1)
+      await Notification.updateOne({ _id: alerts[0]._id }, {
+        $set: { isRead: true },
+      })
+
+      const exceededResponse = await request("/api/transactions", {
+        method: "POST",
+        accessToken: token,
+        body: transactionInput(category, {
+          date: "2024-07-13",
+          amount: 14,
+        }),
+      })
+      assert.equal(exceededResponse.status, 201)
+      const { transaction: exceededTransaction } = await exceededResponse.json()
+      transactionIds.push(new mongoose.Types.ObjectId(exceededTransaction.id))
+
+      const repeatedExceeded = await request("/api/transactions", {
+        method: "POST",
+        accessToken: token,
+        body: transactionInput(category, {
+          date: "2024-07-14",
+          amount: 1,
+        }),
+      })
+      assert.equal(repeatedExceeded.status, 201)
+      const { transaction: repeatedTransaction } = await repeatedExceeded.json()
+      transactionIds.push(new mongoose.Types.ObjectId(repeatedTransaction.id))
+
+      alerts = await Notification.find({
+        relatedId: budget._id,
+        type: { $in: ["budget_warning", "budget_exceeded"] },
+      })
+      assert.equal(
+        alerts.filter(({ type }) => type === "budget_warning").length,
+        1,
+      )
+      assert.equal(
+        alerts.filter(({ type }) => type === "budget_exceeded").length,
+        1,
+      )
+      assert.equal(
+        alerts.find(({ type }) => type === "budget_warning").isRead,
+        true,
+      )
+      assert.ok(alerts.every(({ relatedType }) => relatedType === "budget"))
+    } finally {
+      await cleanNotificationFixtures({
+        transactionIds,
+        budgetIds,
+        categoryIds,
+      })
     }
   })
 })
