@@ -15,6 +15,16 @@ import { useAuth } from "@/contexts/AuthContext"
 import { apiRequest, getSocketBaseUrl } from "@/lib/api"
 
 const CategoryContext = createContext(null)
+const TOKEN_KEY = "budgetflow_token"
+
+function isCurrentSession(activeSessionRef, sessionKey, token) {
+  return Boolean(
+    sessionKey &&
+      token &&
+      activeSessionRef.current === sessionKey &&
+      localStorage.getItem(TOKEN_KEY) === token,
+  )
+}
 
 function categoriesEqual(left, right) {
   return (
@@ -65,7 +75,7 @@ export function CategoryProvider({ children }) {
 
   const userId = user?.role === "client" ? user.id : null
 
-  const token = localStorage.getItem("budgetflow_token")
+  const token = localStorage.getItem(TOKEN_KEY)
 
   const sessionKey = userId && token ? `${userId}:${token}` : null
 
@@ -87,10 +97,14 @@ export function CategoryProvider({ children }) {
 
   const actionsRef = useRef([])
 
+  const previousSessionRef = useRef(sessionKey)
+
   activeSessionRef.current = sessionKey
 
   const refreshCategories = useCallback(() => {
-    if (!sessionKey || !token) return Promise.resolve(false)
+    if (!isCurrentSession(activeSessionRef, sessionKey, token)) {
+      return Promise.resolve(false)
+    }
 
     if (requestRef.current?.sessionKey === sessionKey) {
       return requestRef.current.promise
@@ -117,7 +131,7 @@ export function CategoryProvider({ children }) {
           )
         }
 
-        if (activeSessionRef.current === sessionKey) {
+        if (isCurrentSession(activeSessionRef, sessionKey, token)) {
           const actions = actionsRef.current.filter(
             (action) =>
               action.sessionKey === sessionKey &&
@@ -131,7 +145,9 @@ export function CategoryProvider({ children }) {
           )
 
           setState((current) => {
-            if (activeSessionRef.current !== sessionKey) return current
+            if (!isCurrentSession(activeSessionRef, sessionKey, token)) {
+              return current
+            }
 
             return {
               sessionKey,
@@ -158,7 +174,7 @@ export function CategoryProvider({ children }) {
       })
 
       .catch((requestError) => {
-        if (activeSessionRef.current === sessionKey) {
+        if (isCurrentSession(activeSessionRef, sessionKey, token)) {
           setState((current) => ({
             ...current,
 
@@ -172,7 +188,7 @@ export function CategoryProvider({ children }) {
       })
 
       .finally(() => {
-        if (activeSessionRef.current === sessionKey) {
+        if (isCurrentSession(activeSessionRef, sessionKey, token)) {
           setState((current) =>
             current.sessionKey === sessionKey
               ? { ...current, loading: false }
@@ -204,7 +220,7 @@ export function CategoryProvider({ children }) {
 
       setState((current) => {
         if (
-          activeSessionRef.current !== sessionKey ||
+          !isCurrentSession(activeSessionRef, sessionKey, token) ||
           current.sessionKey !== sessionKey
         ) {
           return current
@@ -220,11 +236,11 @@ export function CategoryProvider({ children }) {
           : { ...current, categories }
       })
     },
-    [sessionKey],
+    [sessionKey, token],
   )
 
   const requireSession = useCallback(() => {
-    if (!sessionKey || !token) {
+    if (!isCurrentSession(activeSessionRef, sessionKey, token)) {
       throw new Error("Sign in to manage categories.")
     }
   }, [sessionKey, token])
@@ -245,7 +261,7 @@ export function CategoryProvider({ children }) {
         throw new Error("The categories service returned an invalid response.")
       }
 
-      if (activeSessionRef.current === sessionKey) {
+      if (isCurrentSession(activeSessionRef, sessionKey, token)) {
         recordAction({
           type: "upsert",
 
@@ -279,7 +295,7 @@ export function CategoryProvider({ children }) {
         throw new Error("The categories service returned an invalid response.")
       }
 
-      if (activeSessionRef.current === sessionKey) {
+      if (isCurrentSession(activeSessionRef, sessionKey, token)) {
         recordAction({
           type: "upsert",
 
@@ -313,7 +329,7 @@ export function CategoryProvider({ children }) {
         throw new Error("The categories service returned an invalid response.")
       }
 
-      if (activeSessionRef.current === sessionKey) {
+      if (isCurrentSession(activeSessionRef, sessionKey, token)) {
         recordAction({ type: "remove", id: categoryId })
       }
 
@@ -323,6 +339,13 @@ export function CategoryProvider({ children }) {
   )
 
   useEffect(() => {
+    if (previousSessionRef.current !== sessionKey) {
+      actionsRef.current = actionsRef.current.filter(
+        (action) => action.sessionKey === sessionKey,
+      )
+      previousSessionRef.current = sessionKey
+    }
+
     if (!sessionKey || !token) {
       actionsRef.current = []
 
@@ -367,14 +390,16 @@ export function CategoryProvider({ children }) {
     })
 
     const handleConnect = () => {
-      refreshCategories()
+      if (isCurrentSession(activeSessionRef, sessionKey, token)) {
+        refreshCategories()
+      }
     }
 
     const handleCategoryCreated = (event) => {
       const category = event?.category
 
       if (
-        activeSessionRef.current !== sessionKey ||
+        !isCurrentSession(activeSessionRef, sessionKey, token) ||
         typeof category?.id !== "string" ||
         !["income", "expense"].includes(category.type)
       ) {

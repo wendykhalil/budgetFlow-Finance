@@ -17,6 +17,16 @@ import { useTransactions } from "@/contexts/TransactionContext"
 import { apiRequest, getSocketBaseUrl } from "@/lib/api"
 
 const BudgetContext = createContext(null)
+const TOKEN_KEY = "budgetflow_token"
+
+function isCurrentSession(activeSessionRef, sessionKey, token) {
+  return Boolean(
+    sessionKey &&
+      token &&
+      activeSessionRef.current === sessionKey &&
+      localStorage.getItem(TOKEN_KEY) === token,
+  )
+}
 
 function sortBudgets(budgets) {
   return [...budgets].sort(
@@ -149,7 +159,7 @@ export function BudgetProvider({ children }) {
 
   const userId = user?.role === "client" ? user.id : null
 
-  const token = localStorage.getItem("budgetflow_token")
+  const token = localStorage.getItem(TOKEN_KEY)
 
   const sessionKey = userId && token ? `${userId}:${token}` : null
 
@@ -180,17 +190,22 @@ export function BudgetProvider({ children }) {
   const sequenceRef = useRef(0)
 
   const actionsRef = useRef([])
+  const previousSessionRef = useRef(sessionKey)
 
   activeSessionRef.current = sessionKey
   stateRef.current = state
 
   const refreshBudgets = useCallback(
     (options = {}) => {
-      if (!sessionKey || !token) return Promise.resolve(false)
+      if (!isCurrentSession(activeSessionRef, sessionKey, token)) {
+        return Promise.resolve(false)
+      }
       if (requestRef.current?.sessionKey === sessionKey) {
         if (options.afterPending) {
           return requestRef.current.promise.then(() =>
-            activeSessionRef.current === sessionKey ? refreshBudgets() : false,
+            isCurrentSession(activeSessionRef, sessionKey, token)
+              ? refreshBudgets()
+              : false,
           )
         }
         return requestRef.current.promise
@@ -232,7 +247,7 @@ export function BudgetProvider({ children }) {
             }),
           )
 
-          if (activeSessionRef.current === sessionKey) {
+          if (isCurrentSession(activeSessionRef, sessionKey, token)) {
             const preserveCurrentSpending =
               spendingRevision !== spendingRevisionRef.current
             const currentBudgets =
@@ -263,7 +278,9 @@ export function BudgetProvider({ children }) {
             )
 
             setState((current) => {
-              if (activeSessionRef.current !== sessionKey) return current
+              if (!isCurrentSession(activeSessionRef, sessionKey, token)) {
+                return current
+              }
 
               return {
                 sessionKey,
@@ -290,7 +307,7 @@ export function BudgetProvider({ children }) {
         })
 
         .catch((requestError) => {
-          if (activeSessionRef.current === sessionKey) {
+          if (isCurrentSession(activeSessionRef, sessionKey, token)) {
             setState((current) => ({
               ...current,
 
@@ -304,7 +321,7 @@ export function BudgetProvider({ children }) {
         })
 
         .finally(() => {
-          if (activeSessionRef.current === sessionKey) {
+          if (isCurrentSession(activeSessionRef, sessionKey, token)) {
             setState((current) =>
               current.sessionKey === sessionKey
                 ? { ...current, loading: false }
@@ -323,7 +340,9 @@ export function BudgetProvider({ children }) {
   )
 
   const refreshBudgetSpending = useCallback(() => {
-    if (!sessionKey || !token) return Promise.resolve(false)
+    if (!isCurrentSession(activeSessionRef, sessionKey, token)) {
+      return Promise.resolve(false)
+    }
 
     const pendingRefresh = spendingRefreshRef.current
     if (pendingRefresh?.sessionKey === sessionKey) {
@@ -349,13 +368,15 @@ export function BudgetProvider({ children }) {
           ]),
         )
 
-        if (activeSessionRef.current !== sessionKey) return false
+        if (!isCurrentSession(activeSessionRef, sessionKey, token)) {
+          return false
+        }
         if (refresh.dirty || revision !== spendingRevisionRef.current) continue
 
         const spendingById = new Map(spendingEntries)
         setState((latest) => {
           if (
-            activeSessionRef.current !== sessionKey ||
+            !isCurrentSession(activeSessionRef, sessionKey, token) ||
             latest.sessionKey !== sessionKey
           ) {
             return latest
@@ -381,7 +402,7 @@ export function BudgetProvider({ children }) {
 
     refresh.promise = runRefresh()
       .catch((requestError) => {
-        if (activeSessionRef.current === sessionKey) {
+        if (isCurrentSession(activeSessionRef, sessionKey, token)) {
           setState((current) =>
             current.sessionKey === sessionKey
               ? {
@@ -407,6 +428,9 @@ export function BudgetProvider({ children }) {
   }, [sessionKey, token])
 
   const requestBudgetSpendingRefresh = useCallback(() => {
+    if (!isCurrentSession(activeSessionRef, sessionKey, token)) {
+      return Promise.resolve(false)
+    }
     spendingRevisionRef.current += 1
     spendingRefreshRequestedRef.current = true
 
@@ -422,7 +446,7 @@ export function BudgetProvider({ children }) {
 
     spendingRefreshRequestedRef.current = false
     return refreshBudgetSpending()
-  }, [refreshBudgetSpending, sessionKey])
+  }, [refreshBudgetSpending, sessionKey, token])
 
   useEffect(() => {
     if (transactionsLoading || !sessionKey) return
@@ -485,7 +509,7 @@ export function BudgetProvider({ children }) {
 
       setState((current) => {
         if (
-          activeSessionRef.current !== sessionKey ||
+          !isCurrentSession(activeSessionRef, sessionKey, token) ||
           current.sessionKey !== sessionKey
         ) {
           return current
@@ -504,7 +528,7 @@ export function BudgetProvider({ children }) {
   const upsertBudget = useCallback(
     (budget) => {
       if (
-        activeSessionRef.current !== sessionKey ||
+        !isCurrentSession(activeSessionRef, sessionKey, token) ||
         typeof budget?.id !== "string"
       ) {
         return
@@ -516,7 +540,7 @@ export function BudgetProvider({ children }) {
         loadBudgetSpending(budget.id, token)
 
           .then((spending) => {
-            if (activeSessionRef.current === sessionKey) {
+            if (isCurrentSession(activeSessionRef, sessionKey, token)) {
               recordAction({
                 type: "upsert",
 
@@ -526,7 +550,9 @@ export function BudgetProvider({ children }) {
           })
 
           .catch(() => {
-            if (activeSessionRef.current === sessionKey) refreshBudgets()
+            if (isCurrentSession(activeSessionRef, sessionKey, token)) {
+              refreshBudgets()
+            }
           })
       }
     },
@@ -543,7 +569,9 @@ export function BudgetProvider({ children }) {
   )
 
   const requireSession = useCallback(() => {
-    if (!sessionKey || !token) throw new Error("Sign in to manage budgets.")
+    if (!isCurrentSession(activeSessionRef, sessionKey, token)) {
+      throw new Error("Sign in to manage budgets.")
+    }
   }, [sessionKey, token])
 
   const createBudget = useCallback(
@@ -609,6 +637,15 @@ export function BudgetProvider({ children }) {
   )
 
   useEffect(() => {
+    if (previousSessionRef.current !== sessionKey) {
+      actionsRef.current = actionsRef.current.filter(
+        (action) => action.sessionKey === sessionKey,
+      )
+      previousSessionRef.current = sessionKey
+      transactionSnapshotRef.current = null
+      spendingRefreshRequestedRef.current = false
+    }
+
     if (!sessionKey || !token) {
       actionsRef.current = []
 
@@ -655,6 +692,7 @@ export function BudgetProvider({ children }) {
     })
 
     const handleConnect = () => {
+      if (!isCurrentSession(activeSessionRef, sessionKey, token)) return
       if (connectedBefore) refreshBudgets({ afterPending: true })
       connectedBefore = true
     }
@@ -663,7 +701,7 @@ export function BudgetProvider({ children }) {
       const budget = event?.budget
 
       if (
-        activeSessionRef.current !== sessionKey ||
+        !isCurrentSession(activeSessionRef, sessionKey, token) ||
         typeof budget?.id !== "string"
       ) {
         return
@@ -674,7 +712,7 @@ export function BudgetProvider({ children }) {
 
     const handleDeleted = (event) => {
       if (
-        activeSessionRef.current === sessionKey &&
+        isCurrentSession(activeSessionRef, sessionKey, token) &&
         typeof event?.budgetId === "string"
       ) {
         removeBudget(event.budgetId)

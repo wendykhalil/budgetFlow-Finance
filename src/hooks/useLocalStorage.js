@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from "react"
 
 export function useLocalStorage(key, initialValue) {
   const [storedValue, setStoredValue] = useState(() => {
@@ -13,14 +13,15 @@ export function useLocalStorage(key, initialValue) {
   const setValue = useCallback(
     (value) => {
       try {
-        const valueToStore = value instanceof Function ? value(storedValue) : value
+        const valueToStore =
+          value instanceof Function ? value(storedValue) : value
         setStoredValue(valueToStore)
         window.localStorage.setItem(key, JSON.stringify(valueToStore))
       } catch (error) {
-        console.error('Error setting localStorage:', error)
+        console.error("Error setting localStorage:", error)
       }
     },
-    [key, storedValue]
+    [key, storedValue],
   )
 
   return [storedValue, setValue]
@@ -34,9 +35,12 @@ export function usePagination(items, itemsPerPage = 10) {
   const endIndex = startIndex + itemsPerPage
   const paginatedItems = items.slice(startIndex, endIndex)
 
-  const goToPage = useCallback((page) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
-  }, [totalPages])
+  const goToPage = useCallback(
+    (page) => {
+      setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+    },
+    [totalPages],
+  )
 
   const nextPage = useCallback(() => {
     if (currentPage < totalPages) setCurrentPage(currentPage + 1)

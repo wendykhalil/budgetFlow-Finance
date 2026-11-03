@@ -56,12 +56,39 @@ function readAuthResponse(response) {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
+  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY))
+  const [socketState, setSocketState] = useState({
+    userId: null,
+    token: null,
+    socket: null,
+  })
   const [loading, setLoading] = useState(true)
   const [authError, setAuthError] = useState("")
+  const tokenRef = useRef(token)
+  const socketRef = useRef(null)
   const sessionRef = useRef({ userId: null, token: null })
+  const profileRequestIdRef = useRef(0)
+  tokenRef.current = token
   sessionRef.current = {
     userId: user?.id || null,
-    token: localStorage.getItem(TOKEN_KEY),
+    token,
+  }
+  const socket =
+    socketState.userId === user?.id && socketState.token === token
+      ? socketState.socket
+      : null
+
+  const disconnectSocket = () => {
+    const activeSocket = socketRef.current
+    if (!activeSocket) return
+
+    activeSocket.socket.off("connect", activeSocket.handleConnect)
+    activeSocket.socket.off(
+      "account:currency-updated",
+      activeSocket.handleCurrencyUpdated,
+    )
+    activeSocket.socket.disconnect()
+    socketRef.current = null
   }
 
   const refreshCurrentUser = useCallback(
@@ -69,18 +96,23 @@ export const AuthProvider = ({ children }) => {
       if (
         !expectedUserId ||
         !expectedToken ||
+        tokenRef.current !== expectedToken ||
         localStorage.getItem(TOKEN_KEY) !== expectedToken
       ) {
         return null
       }
 
+      const requestId = ++profileRequestIdRef.current
+
       try {
         const response = await apiRequest("auth/me", { token: expectedToken })
         if (
+          profileRequestIdRef.current !== requestId ||
           !response?.user ||
           response.user.id !== expectedUserId ||
           sessionRef.current.userId !== expectedUserId ||
           sessionRef.current.token !== expectedToken ||
+          tokenRef.current !== expectedToken ||
           localStorage.getItem(TOKEN_KEY) !== expectedToken
         ) {
           return null
@@ -91,14 +123,21 @@ export const AuthProvider = ({ children }) => {
         setAuthError("")
         return refreshedUser
       } catch (error) {
+        if (profileRequestIdRef.current !== requestId) return null
+
         if (
           sessionRef.current.userId === expectedUserId &&
           sessionRef.current.token === expectedToken
         ) {
           if (error.status === 401) {
+            profileRequestIdRef.current += 1
             sessionRef.current = { userId: null, token: null }
+            disconnectSocket()
             localStorage.removeItem(TOKEN_KEY)
+            tokenRef.current = null
+            setToken(null)
             setUser(null)
+            setLoading(false)
           }
           setAuthError(
             error.message || "Could not refresh your account profile.",
@@ -113,50 +152,100 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     let isMounted = true
     removeLegacyAuthData()
-    const token = localStorage.getItem(TOKEN_KEY)
 
-    async function restoreSession() {
-      if (!token) {
+    async function restoreSession(expectedToken) {
+      const requestId = ++profileRequestIdRef.current
+      if (!expectedToken) {
+        sessionRef.current = { userId: null, token: null }
+        setUser(null)
         setLoading(false)
         return
       }
 
+      setLoading(true)
       try {
-        const response = await apiRequest("auth/me", { token })
+        const response = await apiRequest("auth/me", { token: expectedToken })
         if (!response?.user) {
           throw new Error(
             "The authentication service returned an invalid response.",
           )
         }
-        if (isMounted && localStorage.getItem(TOKEN_KEY) === token) {
-          setUser(getAuthUser(response.user))
+        if (
+          isMounted &&
+          profileRequestIdRef.current === requestId &&
+          tokenRef.current === expectedToken &&
+          localStorage.getItem(TOKEN_KEY) === expectedToken
+        ) {
+          const restoredUser = getAuthUser(response.user)
+          sessionRef.current = {
+            userId: restoredUser.id,
+            token: expectedToken,
+          }
+          setUser(restoredUser)
           setAuthError("")
         }
       } catch (error) {
-        if (!isMounted || localStorage.getItem(TOKEN_KEY) !== token) return
+        if (
+          !isMounted ||
+          profileRequestIdRef.current !== requestId ||
+          tokenRef.current !== expectedToken ||
+          localStorage.getItem(TOKEN_KEY) !== expectedToken
+        ) {
+          return
+        }
         if (error.status === 401) {
+          sessionRef.current = { userId: null, token: null }
           localStorage.removeItem(TOKEN_KEY)
+          tokenRef.current = null
+          setToken(null)
         }
         setUser(null)
         setAuthError(error.message || "Could not restore your session.")
       } finally {
-        if (isMounted) setLoading(false)
+        if (isMounted && profileRequestIdRef.current === requestId) {
+          setLoading(false)
+        }
       }
     }
 
-    restoreSession()
+    const handleStorage = (event) => {
+      if (event.key !== TOKEN_KEY && event.key !== null) return
+
+      const nextToken = localStorage.getItem(TOKEN_KEY)
+      if (nextToken === tokenRef.current) return
+
+      profileRequestIdRef.current += 1
+      sessionRef.current = { userId: null, token: null }
+      disconnectSocket()
+      setUser(null)
+      setAuthError("")
+      tokenRef.current = nextToken
+      setToken(nextToken)
+      setLoading(Boolean(nextToken))
+      void restoreSession(nextToken)
+    }
+
+    window.addEventListener("storage", handleStorage)
+    const initialToken = localStorage.getItem(TOKEN_KEY)
+    if (initialToken !== tokenRef.current) {
+      tokenRef.current = initialToken
+      setToken(initialToken)
+    }
+    void restoreSession(initialToken)
+
     return () => {
       isMounted = false
+      profileRequestIdRef.current += 1
+      window.removeEventListener("storage", handleStorage)
     }
   }, [])
 
   useEffect(() => {
     if (!user?.id) return undefined
 
-    const token = localStorage.getItem(TOKEN_KEY)
     if (!token) return undefined
 
-    const socket = io(getSocketBaseUrl(), {
+    const userSocket = io(getSocketBaseUrl(), {
       auth: { token },
       autoConnect: false,
       reconnection: true,
@@ -168,7 +257,9 @@ export const AuthProvider = ({ children }) => {
       if (
         !SUPPORTED_CURRENCIES.some(({ code }) => code === event?.currency) ||
         sessionRef.current.userId !== user.id ||
-        sessionRef.current.token !== token
+        sessionRef.current.token !== token ||
+        tokenRef.current !== token ||
+        localStorage.getItem(TOKEN_KEY) !== token
       ) {
         return
       }
@@ -179,16 +270,25 @@ export const AuthProvider = ({ children }) => {
       )
     }
 
-    socket.on("connect", handleConnect)
-    socket.on("account:currency-updated", handleCurrencyUpdated)
-    socket.connect()
+    userSocket.on("connect", handleConnect)
+    userSocket.on("account:currency-updated", handleCurrencyUpdated)
+    socketRef.current = {
+      socket: userSocket,
+      handleConnect,
+      handleCurrencyUpdated,
+    }
+    setSocketState({ userId: user.id, token, socket: userSocket })
+    userSocket.connect()
 
     return () => {
-      socket.off("connect", handleConnect)
-      socket.off("account:currency-updated", handleCurrencyUpdated)
-      socket.disconnect()
+      if (socketRef.current?.socket === userSocket) disconnectSocket()
+      setSocketState((currentState) =>
+        currentState.socket === userSocket
+          ? { userId: null, token: null, socket: null }
+          : currentState,
+      )
     }
-  }, [refreshCurrentUser, user?.id])
+  }, [refreshCurrentUser, user?.id, token])
 
   const login = async (email, password) => {
     const response = await apiRequest("auth/login", {
@@ -197,7 +297,11 @@ export const AuthProvider = ({ children }) => {
     })
     const result = readAuthResponse(response)
     removeLegacyAuthData()
+    profileRequestIdRef.current += 1
+    disconnectSocket()
     localStorage.setItem(TOKEN_KEY, result.token)
+    tokenRef.current = result.token
+    setToken(result.token)
     sessionRef.current = { userId: result.user.id, token: result.token }
     setUser(result.user)
     setAuthError("")
@@ -205,27 +309,59 @@ export const AuthProvider = ({ children }) => {
   }
 
   const logout = () => {
+    profileRequestIdRef.current += 1
     sessionRef.current = { userId: null, token: null }
+    disconnectSocket()
     setUser(null)
     localStorage.removeItem(TOKEN_KEY)
+    tokenRef.current = null
+    setToken(null)
     removeLegacyAuthData()
     setAuthError("")
   }
 
-  const updateProfile = (profile) => {
-    setUser((currentUser) =>
-      currentUser
-        ? {
-            ...currentUser,
-            firstName: profile.firstName,
-            lastName: profile.lastName,
-            phone: profile.phone,
-            country: profile.country,
-            avatar:
-              `${profile.firstName[0]}${profile.lastName[0]}`.toUpperCase(),
-          }
-        : currentUser,
-    )
+  const updateProfile = async (profile) => {
+    const token = localStorage.getItem(TOKEN_KEY)
+    if (!user?.id || !token) {
+      throw new Error(
+        "Your session has expired. Sign in again to update profile.",
+      )
+    }
+
+    let response
+    try {
+      response = await apiRequest("auth/profile", {
+        method: "PATCH",
+        token,
+        body: {
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          phone: profile.phone,
+          country: profile.country,
+        },
+      })
+    } catch (error) {
+      if (error.status === 401 && localStorage.getItem(TOKEN_KEY) === token) {
+        logout()
+      }
+      throw error
+    }
+    if (
+      !response?.user ||
+      response.user.id !== user.id ||
+      sessionRef.current.userId !== user.id ||
+      sessionRef.current.token !== token ||
+      localStorage.getItem(TOKEN_KEY) !== token
+    ) {
+      throw new Error(
+        "The account service returned an invalid profile response.",
+      )
+    }
+
+    const updatedUser = getAuthUser(response.user)
+    profileRequestIdRef.current += 1
+    setUser(updatedUser)
+    return updatedUser
   }
 
   const updateCurrency = async (currency) => {
@@ -262,6 +398,7 @@ export const AuthProvider = ({ children }) => {
     }
 
     const updatedUser = getAuthUser(response.user)
+    profileRequestIdRef.current += 1
     setUser(updatedUser)
     return updatedUser
   }
@@ -281,7 +418,11 @@ export const AuthProvider = ({ children }) => {
     })
     const result = readAuthResponse(response)
     removeLegacyAuthData()
+    profileRequestIdRef.current += 1
+    disconnectSocket()
     localStorage.setItem(TOKEN_KEY, result.token)
+    tokenRef.current = result.token
+    setToken(result.token)
     sessionRef.current = { userId: result.user.id, token: result.token }
     setUser(result.user)
     setAuthError("")
@@ -290,6 +431,7 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     user,
+    socket,
     loading,
     authError,
     login,

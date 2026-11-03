@@ -547,4 +547,38 @@ describe("BudgetContext", () => {
       apiRequest.mock.calls.filter(([endpoint]) => endpoint.endsWith("/spent")),
     ).toHaveLength(requestCountAfterRestUpdate)
   })
+
+  it("clears prior-session budgets and ignores a late list response", async () => {
+    let resolveFirstList
+    apiRequest.mockImplementation((endpoint, options = {}) => {
+      if (endpoint === "budgets" && options.token === "token-1") {
+        return new Promise((resolve) => {
+          resolveFirstList = resolve
+        })
+      }
+      if (endpoint === "budgets" && options.token === "token-2") {
+        return Promise.resolve({ budgets: [] })
+      }
+      if (endpoint.endsWith("/spent")) return Promise.resolve(spending)
+      return Promise.reject(new Error(`Unexpected request: ${endpoint}`))
+    })
+
+    const view = renderProvider()
+    await waitFor(() => expect(resolveFirstList).toBeTypeOf("function"))
+
+    window.__budgetTestUser = { id: "user-2", role: "client" }
+    localStorage.setItem("budgetflow_token", "token-2")
+    view.rerender(
+      <TransactionSource>
+        <BudgetProvider>
+          <Consumer />
+        </BudgetProvider>
+      </TransactionSource>,
+    )
+    await waitFor(() => expect(screen.getByText("Loaded")).toBeTruthy())
+    expect(screen.queryByText("Food:85")).toBeNull()
+
+    await act(async () => resolveFirstList({ budgets: [listedBudget] }))
+    expect(screen.queryByText("Food:85")).toBeNull()
+  })
 })

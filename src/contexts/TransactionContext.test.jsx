@@ -139,6 +139,14 @@ function transaction(overrides = {}) {
   }
 }
 
+function deferred() {
+  let resolve
+  const promise = new Promise((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 beforeEach(() => {
   window.__budgetflowTestUser = {
     id: "user-1",
@@ -338,6 +346,102 @@ describe("transaction synchronization", () => {
     await waitFor(() => expect(apiRequest).toHaveBeenCalledTimes(2))
 
     expect(await screen.findByText("Synced after reconnect")).toBeTruthy()
+  })
+
+  it("clears prior-session data and ignores stale responses and socket events", async () => {
+    const firstRequest = deferred()
+    const finalRequest = deferred()
+    const sockets = []
+    io.mockImplementation(() => {
+      const nextSocket = makeSocket()
+      sockets.push(nextSocket)
+      return nextSocket
+    })
+    apiRequest.mockImplementation((endpoint, options) => {
+      if (options.token === "test-token") return firstRequest.promise
+      if (options.token === "token-user-3") return finalRequest.promise
+      return Promise.resolve({
+        transactions: [
+          transaction({
+            id: "user-2-transaction",
+            description: "User two transaction",
+          }),
+        ],
+      })
+    })
+
+    const view = render(
+      <TransactionProvider>
+        <TestConsumer />
+      </TransactionProvider>,
+    )
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledTimes(1))
+    const firstSocket = sockets[0]
+
+    window.__budgetflowTestUser = {
+      id: "user-2",
+      firstName: "Morgan",
+      currency: "USD",
+    }
+    localStorage.setItem("budgetflow_token", "token-user-2")
+    view.rerender(
+      <TransactionProvider>
+        <TestConsumer />
+      </TransactionProvider>,
+    )
+
+    expect(await screen.findByText("User two transaction")).toBeTruthy()
+    expect(screen.queryByText("Initial transaction")).toBeNull()
+    expect(firstSocket.disconnect).toHaveBeenCalledOnce()
+
+    await act(async () =>
+      firstRequest.resolve({
+        transactions: [transaction({ description: "Stale user one data" })],
+      }),
+    )
+    expect(screen.queryByText("Stale user one data")).toBeNull()
+
+    act(() =>
+      firstSocket.emitFromServer("transaction:created", {
+        transaction: transaction({
+          id: "stale-socket",
+          description: "Stale socket data",
+        }),
+      }),
+    )
+    expect(screen.queryByText("Stale socket data")).toBeNull()
+
+    window.__budgetflowTestUser = {
+      id: "user-3",
+      firstName: "Jamie",
+      currency: "USD",
+    }
+    localStorage.setItem("budgetflow_token", "token-user-3")
+    view.rerender(
+      <TransactionProvider>
+        <TestConsumer />
+      </TransactionProvider>,
+    )
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledTimes(3))
+
+    window.__budgetflowTestUser = null
+    localStorage.removeItem("budgetflow_token")
+    view.rerender(
+      <TransactionProvider>
+        <TestConsumer />
+      </TransactionProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.queryByText("User two transaction")).toBeNull()
+      expect(sockets[2].disconnect).toHaveBeenCalledOnce()
+    })
+    await act(async () =>
+      finalRequest.resolve({
+        transactions: [transaction({ description: "After logout response" })],
+      }),
+    )
+    expect(screen.queryByText("After logout response")).toBeNull()
   })
 
   it("updates Dashboard totals from socket events using the configured currency", async () => {
