@@ -1,8 +1,8 @@
-import { useCallback, useRef, useState } from 'react'
-import { Navigate, Outlet, useLocation } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
-import Sidebar from '@/components/layout/Sidebar'
-import Header from '@/components/layout/Header'
+import { useCallback, useRef, useState } from "react"
+import { Navigate, Outlet, useLocation } from "react-router-dom"
+import { useAuth } from "@/contexts/AuthContext"
+import Sidebar from "@/components/layout/Sidebar"
+import Header from "@/components/layout/Header"
 
 export function AdminLayout() {
   const { user, loading } = useAuth()
@@ -16,26 +16,30 @@ export function AdminLayout() {
   }, [])
 
   if (loading) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>
+    return (
+      <div className="flex h-screen items-center justify-center">
+        Loading...
+      </div>
+    )
   }
 
   if (!user) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />
   }
 
-  if (user.role !== 'admin') {
+  if (user.role !== "admin") {
     return <Navigate to="/unauthorized" replace />
   }
 
   const adminNav = [
-    { name: 'Dashboard', icon: 'grid', path: '/admin/dashboard' },
-    { name: 'Users', icon: 'users', path: '/admin/users' },
-    { name: 'Transactions', icon: 'card', path: '/admin/transactions' },
-    { name: 'Categories', icon: 'tag', path: '/admin/categories' },
-    { name: 'Budgets', icon: 'wallet', path: '/admin/budgets' },
-    { name: 'Reports', icon: 'report', path: '/admin/reports' },
-    { name: 'Activity Logs', icon: 'activity', path: '/admin/activity-logs' },
-    { name: 'Settings', icon: 'settings', path: '/admin/settings' },
+    { name: "Dashboard", icon: "grid", path: "/admin/dashboard" },
+    { name: "Users", icon: "users", path: "/admin/users" },
+    { name: "Transactions", icon: "card", path: "/admin/transactions" },
+    { name: "Categories", icon: "tag", path: "/admin/categories" },
+    { name: "Budgets", icon: "wallet", path: "/admin/budgets" },
+    { name: "Reports", icon: "report", path: "/admin/reports" },
+    { name: "Activity Logs", icon: "activity", path: "/admin/activity-logs" },
+    { name: "Settings", icon: "settings", path: "/admin/settings" },
   ]
 
   return (

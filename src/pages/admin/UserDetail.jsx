@@ -1,150 +1,389 @@
-import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import PageTitle from '@/components/layout/PageTitle'
-import Button from '@/components/ui/Button'
-import Badge from '@/components/ui/Badge'
-import Card from '@/components/ui/Card'
-import Avatar from '@/components/ui/Avatar'
-import Icon from '@/components/ui/Icon'
-import { mockUsers, getUserById } from '@/data/mockUsers'
-import { deleteRegisteredUser, getRegisteredUsers, updateRegisteredUser } from '@/data/registeredUsers'
-import { formatCurrency, transactions } from '@/data/mockTransactions'
-import { budgets } from '@/data/mockBudgets'
+import { useEffect, useRef, useState } from "react"
+
+import { useNavigate, useParams } from "react-router-dom"
+
+import PageTitle from "@/components/layout/PageTitle"
+
+import Button from "@/components/ui/Button"
+
+import Badge from "@/components/ui/Badge"
+
+import Card from "@/components/ui/Card"
+
+import Avatar from "@/components/ui/Avatar"
+
+import Icon from "@/components/ui/Icon"
+
+import Alert from "@/components/ui/Alert"
+
+import { useAuth } from "@/contexts/AuthContext"
+
+import { apiRequest } from "@/lib/api"
+
+function validateUserResponse(response, expectedId) {
+  const user = response?.user
+
+  if (
+    !user ||
+    user.id !== expectedId ||
+    typeof user.firstName !== "string" ||
+    typeof user.lastName !== "string" ||
+    typeof user.email !== "string" ||
+    !["active", "pending", "suspended"].includes(user.status) ||
+    !["admin", "client"].includes(user.role)
+  ) {
+    throw new Error("The user detail API returned an unexpected response.")
+  }
+
+  return user
+}
+
+function initialsForUser(user) {
+  return `${user.firstName[0] || ""}${user.lastName[0] || ""}`.toUpperCase()
+}
+
+function displayDate(value) {
+  if (!value) return "Not available"
+
+  const date = new Date(value)
+
+  return Number.isNaN(date.getTime())
+    ? "Not available"
+    : date.toLocaleDateString("en-GB")
+}
 
 export function AdminUserDetail() {
   const navigate = useNavigate()
-  const { id } = useParams()
-  const user = getUserById(id) || getRegisteredUsers().find((entry) => entry.id === id)
-  const [, refresh] = useState(0)
-  const userHasRecords = transactions.some((transaction) => transaction.userId === id)
-    || budgets.some((budget) => budget.userId === id)
-  const userTransactions = transactions.filter((transaction) => transaction.userId === id)
-  const monthPrefix = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
-  const monthTransactions = userTransactions.filter((transaction) => transaction.date.startsWith(monthPrefix))
-  const monthlyIncome = monthTransactions.filter((transaction) => transaction.type === 'income')
-    .reduce((sum, transaction) => sum + transaction.amount, 0)
-  const monthlyExpenses = monthTransactions.filter((transaction) => transaction.type === 'expense')
-    .reduce((sum, transaction) => sum + transaction.amount, 0)
-  const savingsRate = monthlyIncome ? ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100 : null
 
-  if (!user) {
+  const { id } = useParams()
+
+  const { user: adminUser, token } = useAuth()
+
+  const sessionKey =
+    id && adminUser?.id && token ? `${id}:${adminUser.id}:${token}` : ""
+
+  const [detail, setDetail] = useState(null)
+
+  const [statusError, setStatusError] = useState("")
+
+  const [updatingStatus, setUpdatingStatus] = useState(false)
+
+  const currentKeyRef = useRef(sessionKey)
+
+  const statusControllerRef = useRef(null)
+
+  currentKeyRef.current = sessionKey
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    let active = true
+
+    setDetail({
+      requestKey: sessionKey,
+
+      status: "loading",
+
+      user: null,
+
+      error: "",
+    })
+
+    setStatusError("")
+
+    setUpdatingStatus(false)
+
+    statusControllerRef.current?.abort()
+
+    if (!sessionKey) {
+      setDetail({
+        requestKey: sessionKey,
+
+        status: "error",
+
+        user: null,
+
+        error: "An administrator session is required to view user details.",
+      })
+
+      return () => {
+        active = false
+      }
+    }
+
+    apiRequest(`admin/users/${encodeURIComponent(id)}`, {
+      token,
+
+      signal: controller.signal,
+    })
+
+      .then((response) => validateUserResponse(response, id))
+
+      .then((loadedUser) => {
+        if (!active) return
+
+        setDetail({
+          requestKey: sessionKey,
+
+          status: "success",
+
+          user: loadedUser,
+
+          error: "",
+        })
+      })
+
+      .catch((error) => {
+        if (!active || controller.signal.aborted) return
+
+        setDetail({
+          requestKey: sessionKey,
+
+          status: "error",
+
+          user: null,
+
+          error: error.message || "Could not load this user.",
+        })
+      })
+
+    return () => {
+      active = false
+
+      controller.abort()
+
+      statusControllerRef.current?.abort()
+    }
+  }, [id, sessionKey, token])
+
+  const currentDetail =
+    detail?.requestKey === sessionKey
+      ? detail
+      : { status: "loading", user: null, error: "" }
+
+  const selectedUser = currentDetail.user
+
+  const handleStatusChange = async () => {
+    if (!selectedUser || updatingStatus || !token) return
+
+    const nextStatus =
+      selectedUser.status === "suspended" ? "active" : "suspended"
+
+    const requestKey = sessionKey
+
+    const controller = new AbortController()
+
+    statusControllerRef.current = controller
+
+    setUpdatingStatus(true)
+
+    setStatusError("")
+
+    try {
+      const response = await apiRequest(
+        `admin/users/${encodeURIComponent(id)}/status`,
+
+        {
+          token,
+
+          method: "PATCH",
+
+          body: { status: nextStatus },
+
+          signal: controller.signal,
+        },
+      )
+
+      const updatedUser = validateUserResponse(response, id)
+
+      if (currentKeyRef.current !== requestKey || controller.signal.aborted) {
+        return
+      }
+
+      setDetail({
+        requestKey,
+
+        status: "success",
+
+        user: updatedUser,
+
+        error: "",
+      })
+    } catch (error) {
+      if (controller.signal.aborted || currentKeyRef.current !== requestKey) {
+        return
+      }
+
+      setStatusError(error.message || "Could not update this user's status.")
+    } finally {
+      if (currentKeyRef.current === requestKey) setUpdatingStatus(false)
+
+      if (statusControllerRef.current === controller) {
+        statusControllerRef.current = null
+      }
+    }
+  }
+
+  if (currentDetail.status === "loading") {
     return (
-      <Card>
-        <p className="font-semibold text-slate-900">User not found.</p>
-        <Button className="mt-4" onClick={() => navigate('/admin/users')}>Back to users</Button>
-      </Card>
+      <p role="status" className="py-12 text-center text-sm text-slate-500">
+        Loading user details…
+      </p>
     )
   }
 
-  const handleStatusChange = () => {
-    const status = user.status === 'suspended' ? 'active' : 'suspended'
-    const mockUser = getUserById(id)
-    if (mockUser) mockUser.status = status
-    else updateRegisteredUser(id, { status })
-    refresh((value) => value + 1)
-  }
-
-  const handleDelete = () => {
-    if (!window.confirm(`Delete ${user.firstName} ${user.lastName}? This cannot be undone.`)) return
-    const index = mockUsers.findIndex((entry) => entry.id === id)
-    if (index !== -1) mockUsers.splice(index, 1)
-    else deleteRegisteredUser(id)
-    navigate('/admin/users')
+  if (currentDetail.status === "error") {
+    return (
+      <>
+        <PageTitle
+          title="User details"
+          action={
+            <Button
+              variant="secondary"
+              onClick={() => navigate("/admin/users")}
+            >
+              <Icon name="arrow-left" className="size-4" /> Back
+            </Button>
+          }
+        />
+        <Alert
+          type="error"
+          title="User details unavailable"
+          message={currentDetail.error}
+        />
+      </>
+    )
   }
 
   return (
     <>
       <PageTitle
         title="User details"
-        sub="View and manage user account."
+        sub="Account information is loaded from the admin user detail API."
         action={
-          <Button variant="secondary" onClick={() => navigate('/admin/users')}>
+          <Button variant="secondary" onClick={() => navigate("/admin/users")}>
             <Icon name="arrow-left" className="size-4" /> Back
           </Button>
         }
       />
 
+      {statusError && (
+        <Alert className="mb-5" type="error" message={statusError} />
+      )}
+
       <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
         <Card className="text-center">
-          <Avatar initials={user.avatar} size="xl" color={user.avatarColor} />
+          <Avatar initials={initialsForUser(selectedUser)} size="xl" />
           <div className="mt-4 text-xl font-bold">
-            {user.firstName} {user.lastName}
+            {selectedUser.firstName} {selectedUser.lastName}
           </div>
-          <div className="text-sm text-slate-500">{user.email}</div>
+          <div className="text-sm text-slate-500">{selectedUser.email}</div>
           <div className="mt-3">
-            <Badge tone={user.status === 'active' ? 'green' : user.status === 'pending' ? 'amber' : 'red'}>
-              {user.status}
+            <Badge
+              tone={
+                selectedUser.status === "active"
+                  ? "green"
+                  : selectedUser.status === "pending"
+                    ? "amber"
+                    : "red"
+              }
+            >
+              {selectedUser.status}
             </Badge>
           </div>
-          <Badge tone={user.role === 'admin' ? 'blue' : 'neutral'} className="mt-2">
-            {user.role}
+          <Badge
+            tone={selectedUser.role === "admin" ? "blue" : "neutral"}
+            className="mt-2"
+          >
+            {selectedUser.role}
           </Badge>
         </Card>
 
         <div className="space-y-5">
           <Card>
-            <div className="font-bold mb-4">Account information</div>
+            <div className="mb-4 font-bold">Account information</div>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <span className="text-xs text-slate-400">First name</span>
-                <div className="mt-1 font-semibold">{user.firstName}</div>
+                <div className="mt-1 font-semibold">
+                  {selectedUser.firstName}
+                </div>
               </div>
               <div>
                 <span className="text-xs text-slate-400">Last name</span>
-                <div className="mt-1 font-semibold">{user.lastName}</div>
+                <div className="mt-1 font-semibold">
+                  {selectedUser.lastName}
+                </div>
               </div>
               <div>
                 <span className="text-xs text-slate-400">Email</span>
-                <div className="mt-1 font-semibold">{user.email}</div>
+                <div className="mt-1 font-semibold">{selectedUser.email}</div>
               </div>
               <div>
                 <span className="text-xs text-slate-400">Phone</span>
-                <div className="mt-1 font-semibold">{user.phone || 'Not set'}</div>
+                <div className="mt-1 font-semibold">
+                  {selectedUser.phone || "Not set"}
+                </div>
               </div>
               <div>
-                <span className="text-xs text-slate-400">Role</span>
-                <div className="mt-1 font-semibold">{user.role}</div>
+                <span className="text-xs text-slate-400">Country</span>
+                <div className="mt-1 font-semibold">
+                  {selectedUser.country || "Not available"}
+                </div>
+              </div>
+              <div>
+                <span className="text-xs text-slate-400">Currency</span>
+                <div className="mt-1 font-semibold">
+                  {selectedUser.currency || "Not available"}
+                </div>
+              </div>
+              <div>
+                <span className="text-xs text-slate-400">Joined</span>
+                <div className="mt-1 font-semibold">
+                  {displayDate(selectedUser.createdAt)}
+                </div>
               </div>
               <div>
                 <span className="text-xs text-slate-400">Status</span>
-                <div className="mt-1 font-semibold">{user.status}</div>
+                <div className="mt-1 font-semibold">{selectedUser.status}</div>
               </div>
             </div>
           </Card>
 
           <Card>
-            <div className="font-bold mb-4">Activity summary</div>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-xl bg-slate-50 p-4 text-center">
-                <div className="text-2xl font-bold">{userTransactions.length}</div>
-                <div className="text-xs text-slate-400">Transactions</div>
-              </div>
-              <div className="rounded-xl bg-slate-50 p-4 text-center">
-                <div className="text-2xl font-bold">{formatCurrency(monthlyExpenses)}</div>
-                <div className="text-xs text-slate-400">Spent this month</div>
-              </div>
-              <div className="rounded-xl bg-slate-50 p-4 text-center">
-                <div className="text-2xl font-bold">{savingsRate === null ? '—' : `${savingsRate.toFixed(1)}%`}</div>
-                <div className="text-xs text-slate-400">Savings rate</div>
-              </div>
-            </div>
+            <div className="font-bold">Activity summary unavailable</div>
+            <p className="mt-2 text-sm text-slate-500">
+              The existing user detail API does not include per-user transaction
+              or budget summaries.
+            </p>
           </Card>
 
-          <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={handleStatusChange}>
-              {user.status === 'suspended' ? 'Reactivate' : 'Suspend'}
+          <div className="flex flex-wrap justify-end gap-3">
+            <Button
+              variant="secondary"
+              onClick={handleStatusChange}
+              disabled={updatingStatus}
+            >
+              {updatingStatus
+                ? "Updating…"
+                : selectedUser.status === "suspended"
+                  ? "Reactivate"
+                  : "Suspend"}
             </Button>
-            <Button variant="secondary" disabled title="Password resets require a backend service">
+            <Button
+              variant="secondary"
+              disabled
+              title="Password resets require a backend endpoint"
+            >
               Password reset unavailable
             </Button>
-            <button
-              onClick={handleDelete}
-              disabled={userHasRecords}
-              title={userHasRecords ? 'Users with transactions or budgets cannot be deleted' : undefined}
-              className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+            <Button
+              variant="secondary"
+              disabled
+              title="User deletion is not supported by the existing admin API"
             >
-              {userHasRecords ? 'User has records' : 'Delete user'}
-            </button>
+              Delete unavailable
+            </Button>
           </div>
         </div>
       </div>
