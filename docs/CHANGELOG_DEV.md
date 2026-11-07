@@ -1,3 +1,38 @@
+# 2026-11-07 — Login Page UI Polish
+
+### Objective
+
+Polish the BudgetFlow login experience for portfolio presentation while preserving the existing authentication integration, route behavior, and responsive design.
+
+### Changes Implemented
+
+- Refined the responsive login layout, branding hierarchy, form spacing, focus states, error messaging, and sign-in loading state.
+- Replaced fictional balance metrics with non-numeric product benefits and removed the backend-account wording.
+- Kept the existing `auth/login` request and role-aware redirect behavior; linked password recovery and account creation to `/forgot-password` and `/register`.
+- Converted technical login failures to friendly messages and retained raw login error details in development console diagnostics only.
+
+### Files Modified
+
+- `src/pages/auth/Login.jsx`
+- `src/pages/auth/Login.test.jsx` (created)
+- `docs/CHANGELOG_DEV.md`
+
+### Tests
+
+- `pnpm exec vitest run src/pages/auth/Login.test.jsx --environment jsdom` — passed (1 file, 3 tests).
+- `pnpm test` — passed (27 files, 263 tests).
+- Browser layout check at 1440x900 and 390x844 — branding is desktop-only and no horizontal overflow was detected on mobile.
+
+### Build
+
+- `pnpm build` — initially blocked because `VITE_API_URL` was unset.
+- Production build with `VITE_API_URL=https://api.example.invalid/api` supplied for compilation — passed (129 modules transformed). This placeholder does not verify API availability.
+
+### Remaining Issues and Next Steps
+
+- Forgot-password route currently presents the existing demo flow, which states that reset email delivery is unavailable; no password-reset API behavior was changed.
+- Configure the real `VITE_API_URL` for production builds and verify sign-in against that backend.
+
 # 2026-11-03 — P1.5.11 Configure Vercel Deployment for Frontend SPA
 
 ### Objective

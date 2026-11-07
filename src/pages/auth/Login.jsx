@@ -1,87 +1,122 @@
 import { useState } from "react"
-import { useNavigate, useLocation } from "react-router-dom"
+
+import { Link, useLocation, useNavigate } from "react-router-dom"
+
 import { useAuth } from "@/contexts/AuthContext"
+
 import Logo from "@/components/layout/Logo"
+
 import Button from "@/components/ui/Button"
+
 import Badge from "@/components/ui/Badge"
+
 import Input from "@/components/ui/Input"
+
+const getFriendlyLoginError = (error) => {
+  if (error?.status === 401) {
+    return "The email or password you entered is incorrect."
+  }
+
+  return "We couldn't sign you in. Please try again in a moment."
+}
 
 export function Login() {
   const navigate = useNavigate()
+
   const location = useLocation()
+
   const { login, authError } = useAuth()
 
   const [email, setEmail] = useState("")
+
   const [password, setPassword] = useState("")
+
   const [error, setError] = useState("")
+
   const [loading, setLoading] = useState(false)
+
+  const visibleError = error || (authError ? "Please sign in to continue." : "")
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+
     if (loading) return
+
     setLoading(true)
+
     setError("")
 
     try {
       const result = await login(email, password)
+
       const isAdmin = result.user.role === "admin"
+
       const rolePrefix = isAdmin ? "/admin/" : "/client/"
+
       const roleHome = isAdmin ? "/admin/dashboard" : "/client/dashboard"
+
       const requestedPath = location.state?.from
+
       const path = requestedPath?.startsWith(rolePrefix)
         ? requestedPath
         : roleHome
+
       navigate(path, { replace: true })
     } catch (loginError) {
-      setError(loginError.message || "Unable to sign in.")
+      if (import.meta.env.DEV) {
+        console.error("Login request failed:", loginError)
+      }
+
+      setError(getFriendlyLoginError(loginError))
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <main className="min-h-screen bg-[#F4F7F6]">
-      <div className="container mx-auto flex min-h-screen items-center justify-center p-4">
-        <div className="hidden lg:block lg:absolute lg:inset-0">
-          <div className="absolute inset-0 bg-[#103F38]" />
-          <div className="relative mx-auto max-w-7xl px-8 py-12 text-white">
-            <Logo inverse />
-            <div className="mt-12 max-w-lg">
-              <Badge tone="green">Your finances, simplified</Badge>
-              <div className="mt-6 text-5xl font-bold leading-tight">
-                Make every euro work smarter.
-              </div>
-              <p className="mt-5 text-lg leading-8 text-emerald-100/80">
-                One calm, organized space to understand spending, grow savings,
-                and reach your financial goals.
+    <main className="min-h-screen bg-[#F4F7F6] lg:bg-[#103F38]">
+      <div className="mx-auto grid min-h-screen max-w-7xl items-center gap-10 p-4 sm:p-8 lg:grid-cols-2 lg:gap-16 lg:px-12 lg:py-10">
+        <section
+          aria-label="About BudgetFlow"
+          className="hidden text-white lg:block"
+        >
+          <Logo inverse />
+          <div className="mt-16 max-w-xl">
+            <Badge tone="green">Your finances, simplified</Badge>
+            <h2 className="mt-7 text-5xl font-bold leading-tight tracking-tight xl:text-6xl">
+              Make every financial decision feel clearer.
+            </h2>
+            <p className="mt-6 max-w-lg text-lg leading-8 text-emerald-100/80">
+              One calm, organized space to understand spending, grow savings,
+              and work toward your goals.
+            </p>
+            <div className="mt-10 rounded-2xl border border-white/10 bg-white/5 p-5">
+              <p className="text-sm font-semibold text-emerald-50">
+                A clearer view of your money
               </p>
-              <div className="mt-10 grid grid-cols-3 gap-3">
+              <div className="mt-4 flex flex-wrap gap-2">
                 {[
-                  ["€4,250", "Balance"],
-                  ["44%", "Saved"],
-                  ["6", "Budgets"],
-                ].map(([v, l]) => (
-                  <div
-                    key={l}
-                    className="rounded-2xl border border-white/10 bg-white/10 p-4"
+                  "Spending overview",
+                  "Flexible budgets",
+                  "Track your progress",
+                ].map((feature) => (
+                  <span
+                    key={feature}
+                    className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-sm text-emerald-50/90"
                   >
-                    <div className="text-2xl font-bold">{v}</div>
-                    <div className="mt-1 text-xs text-emerald-100/70">{l}</div>
-                  </div>
+                    {feature}
+                  </span>
                 ))}
               </div>
             </div>
-            <div className="absolute bottom-12 text-sm text-emerald-100/60">
-              Secure, private, and built around you.
-            </div>
           </div>
-        </div>
+          <p className="mt-12 text-sm text-emerald-100/60">
+            Secure, private, and built around you.
+          </p>
+        </section>
 
-        <div className="relative z-10 w-full max-w-md rounded-3xl bg-white p-7 shadow-sm lg:p-10">
-          <div className="text-center lg:hidden">
-            <Logo />
-          </div>
-          <div className="hidden lg:text-center lg:mb-8">
+        <section className="mx-auto w-full max-w-md rounded-3xl bg-white p-6 shadow-xl shadow-emerald-950/10 ring-1 ring-slate-900/5 sm:p-9">
+          <div className="mb-8 lg:hidden">
             <Logo />
           </div>
 
@@ -92,60 +127,74 @@ export function Login() {
             Sign in to continue to your financial dashboard.
           </p>
 
-          <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+          <form onSubmit={handleSubmit} className="mt-8 space-y-6">
             <Input
               label="Email address"
               type="email"
+              autoComplete="email"
+              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              error={error || authError}
+              className="py-3.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
             />
             <Input
               label="Password"
               type="password"
+              autoComplete="current-password"
+              required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              className="py-3.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
             />
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-sm">
               <label className="flex items-center gap-2 text-slate-600">
                 <input
                   type="checkbox"
-                  className="accent-emerald-700"
+                  className="size-4 rounded border-slate-300 accent-[#155C4F] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
                   defaultChecked
                 />
                 Remember me
               </label>
-              <button
-                type="button"
-                onClick={() => navigate("/forgot-password")}
-                className="font-semibold text-[#155C4F]"
+              <Link
+                to="/forgot-password"
+                className="font-semibold text-[#155C4F] underline-offset-4 hover:text-[#104B41] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
               >
                 Forgot password?
-              </button>
+              </Link>
             </div>
-            <Button type="submit" disabled={loading} className="w-full">
+            {visibleError && (
+              <p
+                role="alert"
+                className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+              >
+                {visibleError}
+              </p>
+            )}
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 shadow-sm transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
+            >
+              {loading && (
+                <span
+                  aria-hidden="true"
+                  className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
+                />
+              )}
               {loading ? "Signing in..." : "Sign in"}
             </Button>
           </form>
 
-          <div className="my-7 flex items-center gap-3 text-xs text-slate-400 before:h-px before:flex-1 before:bg-slate-200 after:h-px after:flex-1 after:bg-slate-200">
-            BACKEND ACCOUNTS
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-            Sign in with an account registered with BudgetFlow. Admin accounts
-            must be provisioned separately.
-          </div>
-
-          <p className="mt-7 text-center text-sm text-slate-500">
+          <p className="mt-8 text-center text-sm text-slate-500">
             New to BudgetFlow?{" "}
-            <button
-              onClick={() => navigate("/register")}
-              className="font-bold text-[#155C4F]"
+            <Link
+              to="/register"
+              className="font-bold text-[#155C4F] underline-offset-4 hover:text-[#104B41] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
             >
               Create account
-            </button>
+            </Link>
           </p>
-        </div>
+        </section>
       </div>
     </main>
   )
